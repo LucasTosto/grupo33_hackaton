@@ -13,6 +13,7 @@ const NAV = [
   { href: "/", rotulo: "Início" },
   { href: "/inscricao", rotulo: "Inscrição" },
   { href: "/acompanhar", rotulo: "Consulta inscrição" },
+  { href: "/como-funciona", rotulo: "Como funciona" },
   { href: "/vagas", rotulo: "Onde há vaga" },
   { href: "/painel", rotulo: "Painel da rede" },
 ];
@@ -35,6 +36,39 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Ir para o conteúdo
         </a>
+
+        {/*
+          Tarja de protótipo, no topo e fora do fluxo.
+
+          Antes o aviso estava no rodapé, onde ninguém lê, e o botão "Nova
+          simulação" aparecia no fim do formulário — quebrando a ilusão de
+          serviço exatamente no momento em que a família acabara de se
+          inscrever. Invertido: o aviso vem antes de tudo, e o serviço roda
+          inteiro sem se interromper.
+        */}
+        <div className="border-b-2 border-atencao bg-atencao-fundo">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-1.5 px-5 py-2">
+            <p className="text-[12.5px] text-texto-2">
+              <strong className="font-bold text-atencao">Protótipo do Claude Impact Lab.</strong> Não é canal
+              oficial — a inscrição válida é no{" "}
+              <a
+                href="https://matricula.rio"
+                rel="noreferrer noopener"
+                target="_blank"
+                className="font-bold text-azul underline underline-offset-2"
+              >
+                matricula.rio
+              </a>
+              .
+            </p>
+            <Link
+              href="/como-funciona"
+              className="text-[11.5px] font-bold tracking-[0.06em] uppercase text-azul underline-offset-2 hover:underline"
+            >
+              Como funciona
+            </Link>
+          </div>
+        </div>
 
         {/* ── barra utilitária: liga o serviço ao portal da Prefeitura ── */}
         <div className="bg-azul-escuro text-white">

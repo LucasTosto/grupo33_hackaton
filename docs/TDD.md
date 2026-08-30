@@ -963,6 +963,94 @@ concluída. Antes disso, o motor só deve rodar em sombra.
 
 ---
 
+## 19. Régua nova e front de inscrição — o que foi construído
+
+Implementação de [`REGUA_DE_PONTUACAO.md`](REGUA_DE_PONTUACAO.md) e
+[`FRONT_INSCRICAO_UX.md`](FRONT_INSCRICAO_UX.md). Esta seção registra o que entrou, o que ficou de
+fora e — o que mais importa para quem for continuar — **onde o protótipo simula e onde ele mede**.
+
+### 19.1 Módulos novos
+
+| Módulo | O que faz |
+|---|---|
+| [`lib/regua.ts`](../lib/regua.ts) | A régua: 5 blocos, 19 graus, teto por bloco, separação `confirmados`/`a confirmar`, as 5 + 2 perguntas, catálogo documento → grau, indicadores de degradação |
+| [`lib/bairros.ts`](../lib/bairros.ts) | Lista canônica de bairros e dicionário de normalização dos 1.607 valores da base |
+| [`lib/bases.ts`](../lib/bases.ts) | Consulta às bases do governo — **simulação**, ver §19.4 |
+| [`app/api/bases/route.ts`](../app/api/bases/route.ts) | Consulta por CPF e por CEP; devolve os cartões da conferência e quais perguntas condicionais disparam |
+| [`app/como-funciona/page.tsx`](../app/como-funciona/page.tsx) | Destino de todo número de diagnóstico que saiu do formulário, e dos três indicadores de alerta |
+
+### 19.2 As três regras que o código faz valer
+
+**Teto por bloco.** Dentro do bloco vale o item de maior grau, não a soma. Violência no núcleo (20)
+com álcool e drogas (15) dá 20, e não 35 — e a tela diz isso em uma frase, porque sem ela `20 + 15 =
+20` é lido como erro do sistema. Verificado em `test/regua.test.ts`.
+
+**Origem no dado, não no comentário.** `grau_origem ∈ {aferido, atestado, declarado}` faz parte do
+item. `confirmados` é composto só com os dois primeiros, e é `confirmados` que ordena a fila.
+Consequência prática: `calcula` **recusa** um grau cuja origem o grau não admite — é o que impede
+uma declaração de alcançar o grau de 10 pontos do bloco de cuidado, que exige composição familiar
+aferida do CadÚnico.
+
+**Um grau, uma linha.** O mesmo grau chega por dois caminhos com frequência (o SISVAN registra
+déficit nutricional *e* a família responde "sim" à pergunta de doença grave). A régua reduz pela
+origem mais forte. Sem isso a decomposição mostraria a linha duas vezes e prometeria pontos a
+confirmar que já estavam confirmados.
+
+### 19.3 Um defeito de classificação corrigido de passagem
+
+A extração grava em `desempates` o `ich_perg_id` da base (286, 287), enquanto o vetor de desempate e
+o catálogo falam em `pergId` (29, 30). O nível 2 do desempate — irmão matriculado, depois responsável
+menor de 18 — **não casava com candidato nenhum da fila histórica**: a comparação era feita contra um
+conjunto vazio e o desempate caía direto no sorteio, em silêncio. A tradução está em
+`inscricoesHistoricas()`. Isso muda a ordem de classificação da fila histórica, e é a correção de um
+erro, não uma mudança de política.
+
+### 19.4 Onde o protótipo simula, e por quê
+
+| Área | Situação |
+|---|---|
+| Consulta às bases (CadÚnico, BPC/INSS, SGA, SISVAN, Vara da Infância) | **Simulada** em `lib/bases.ts`, com cinco perfis derivados da base anonimizada. Fonte e data de consulta são declaradas como as integrações reais declararão; o formato de retorno é o contrato |
+| Login gov.br | **Não implementado.** A tela existe, com os dois caminhos sem beco sem saída, e o botão está desabilitado com o motivo dito |
+| Consulta de CEP | **Simulada.** CEP na faixa do município resolve de forma determinística contra o cadastro de logradouros das unidades; fora da faixa devolve "não encontrado", que é o que faz aparecer o seletor de bairro canônico |
+| Envio de documento | **Simulado.** O estado do item avança para "recebido"; não há armazenamento, análise nem SLA |
+| Verificação do celular por SMS | **Simulada.** Qualquer sequência de 6 dígitos confirma, e a tela diz isso |
+| Reordenar creches por arraste | **Não implementado.** Estão as duas outras vias — setas de 48 px e seletor numérico de posição. O arraste era a terceira via pedida |
+| Modo assistido e pontos de atendimento | **Não implementados.** A página pública explica os canais; a operação assistida não existe |
+
+### 19.5 A limitação que mais afeta o número na tela
+
+**A fila histórica não pode ser reclassificada pela régua nova.** A extração anonimizada guarda a
+pontuação total de cada inscrição de 2025, e não quais critérios foram comprovados — é a mesma
+ressalva que a validação da régua registra ao simular o Bloco 1 com três graus aproximados. Sem o
+detalhe por critério, não há como aplicar a régua nova às 71.949 inscrições.
+
+Então a inscrição nova é pontuada pela régua nova, e `equivalenteNaFila2025` projeta esse valor na
+escala de 2025 para estimar a posição, por interpolação entre três âncoras que as duas réguas
+compartilham: zero, o teto de 100, e o máximo de renda (35 na nova contra os 51 do CadÚnico na de
+2025).
+
+O que essa função **não** é: não reclassifica a fila histórica e não muda a ordem relativa de
+ninguém nela. É a projeção de um score novo sobre uma escala antiga, e é mais um motivo para a
+posição ir à família como faixa, e nunca como número cravado. Quando a SME liberar a resposta por
+critério da extração, a projeção sai e a fila é reclassificada de verdade.
+
+### 19.6 Suposições adotadas que a SME precisa confirmar
+
+Especificadas com a suposição indicada, para não travar o desenho. Cada uma muda o comportamento de
+uma tela concreta.
+
+| # | Decisão | Suposição no código |
+|---|---|---|
+| 1 | "Outra pessoa da casa" privada de liberdade vale algum grau? | **Sim, grau menor** — `privacao_outro_membro`, 4 pontos. É o único caso em que a régua nova reduz a pontuação de quem hoje pontua, e zerar seria uma perda concreta para um subgrupo |
+| 2 | Sem CadÚnico, a declaração dá acesso a que grau do bloco de cuidado? | **Só ao de 6** (monoparental). O de 10 exige aferição, e a régua recusa a origem declarada |
+| 3 | Deficiência do responsável sem BPC: atestação ou pergunta? | **Pergunta condicional**, que aparece só quando o BPC não responde |
+| 4 | Medida protetiva é consultada sem consentimento do responsável? | **Sim**, com aviso na tela de consentimento e sem exibição em nenhuma tela |
+| 5 | Faixa de renda é revelável? | **Por toque deliberado** em `Ver detalhe`, com encaminhamento ao CRAS |
+| 6 | Grau máximo do bloco de proteção | Separado em **dois graus** de 25: `protecao_crianca` (consultado, protegido, nunca exibido) e `violencia_crianca` (declarado pela família, exibido com o rótulo verdadeiro). Fundi-los faria a declaração da família aparecer na tela como "informação protegida de outro órgão" |
+
+
+---
+
 ## Fontes
 
 - [`CIT-SME-RJ/dadoscreche`](https://github.com/CIT-SME-RJ/dadoscreche) — bases anonimizadas dos

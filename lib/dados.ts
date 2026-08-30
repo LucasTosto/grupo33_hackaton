@@ -37,6 +37,16 @@ import {
   type FilaCompacta,
   type InscricaoHistorica,
 } from "./fila.ts";
+import { bairroCanonico, geoAproximada } from "./bairros.ts";
+import {
+  calcula,
+  equivalenteNaFila2025,
+  PONTUACAO_MAXIMA,
+  REGUA_VERSAO,
+  REGUA_VIGENCIA_PROCESSOS,
+  type ItemDeclarado,
+  type Pontuacao,
+} from "./regua.ts";
 
 // ───────────────────────────────────────────────────────────────── tipos
 
@@ -314,8 +324,22 @@ export function unidadesComAssento(grupamento: string, horario: Horario): Unidad
 let _fila: Candidato[] | null = null;
 let _inscricoes: InscricaoHistorica[] | null = null;
 
+/**
+ * `ichPergId` → `pergId` nos critérios de desempate da fila histórica.
+ *
+ * A extração grava em `desempates` o `ich_perg_id` da base (286, 287), enquanto
+ * o vetor de desempate e o catálogo falam em `pergId` (29, 30). Sem a tradução
+ * o nível 2 do desempate — irmão matriculado, depois responsável menor de 18 —
+ * não casava com candidato nenhum da fila histórica: a comparação era feita
+ * contra um conjunto vazio e o desempate caía direto no sorteio, em silêncio.
+ */
+const PERG_POR_ICH = new Map(catalogo.criterios.map((c) => [c.ichPergId, c.pergId]));
+
 function inscricoesHistoricas(): InscricaoHistorica[] {
-  if (!_inscricoes) _inscricoes = decodificaFila(filaJson as unknown as FilaCompacta);
+  if (_inscricoes) return _inscricoes;
+  const cru = decodificaFila(filaJson as unknown as FilaCompacta);
+  for (const i of cru) i.desempates = i.desempates.map((d) => PERG_POR_ICH.get(d) ?? d);
+  _inscricoes = cru;
   return _inscricoes;
 }
 
@@ -360,8 +384,8 @@ function comProximidade(candidatos: Candidato[]): Candidato[] {
   const centros = centroidesDeBairro();
 
   for (const c of candidatos) {
-    const bairro = bairroDe.get(c.id);
-    const centro = bairro ? centros.get(bairro.trim()) : undefined;
+    const bairro = bairroCanonico(bairroDe.get(c.id));
+    const centro = bairro ? centros.get(bairro) : undefined;
     if (!centro) continue;
 
     const dist: number[] = [];
@@ -394,8 +418,17 @@ export interface InscricaoViva {
   horario: Horario;
   /** Códigos de unidade em ordem de preferência. */
   opcoes: number[];
-  /** `pergId` dos critérios que a família declarou e comprovou. */
-  criterios: number[];
+  /**
+   * Graus da régua atribuídos a esta inscrição, com a origem de cada um.
+   *
+   * Substituiu a lista de `pergId` da régua de 2025. Não era uma troca de
+   * nomes: os blocos 2, 3 e 4 da régua nova têm três e quatro graus cada, e um
+   * booleano por critério não representa mais o critério. E a origem passou a
+   * ser parte do dado, porque é ela que decide se o ponto ordena a fila.
+   */
+  itens: ItemDeclarado[];
+  /** `pergId` dos critérios de desempate atendidos: irmão, responsável menor de 18. */
+  desempates?: number[];
   bairro?: string | null;
   /**
    * Qual opção fica na lista de espera se a criança for alocada fora dela.
@@ -404,20 +437,26 @@ export interface InscricaoViva {
   opcaoMantida?: number;
 }
 
+/**
+ * Candidato do motor a partir da inscrição, pela régua nova.
+ *
+ * `pontos` recebe **só os confirmados** — o que foi aferido em base ou atestado
+ * por serviço público. Ponto declarado e não confirmado fica fora da ordenação,
+ * e é o que permite adotar a régua nova antes de a aferição estar completa: com
+ * critérios de risco valendo 10 a 25 pontos, deixar a autodeclaração ordenar a
+ * fila amplificaria um sinal que se contradiz entre processos em 80% a 92% dos
+ * casos — pior do que não mudar nada.
+ *
+ * A conversão para a escala de 2025 existe porque a fila histórica não pode ser
+ * reclassificada (ver `equivalenteNaFila2025`), e é o único ponto do sistema em
+ * que as duas réguas se encontram.
+ */
 export function candidatoDeInscricao(i: InscricaoViva): Candidato {
-  const porPergId = new Map(catalogo.criterios.map((c) => [c.pergId, c]));
-  let pontos = 0;
-  const desempates: number[] = [];
-  for (const pid of i.criterios) {
-    const c = porPergId.get(pid);
-    if (!c) continue;
-    pontos += c.pontos;
-    if (c.desempate) desempates.push(c.pergId);
-  }
+  const pontuacao = calcula(i.itens);
   return {
     id: i.protocolo,
-    pontos,
-    desempates,
+    pontos: equivalenteNaFila2025(pontuacao.confirmados),
+    desempates: [...(i.desempates ?? [])],
     preferencias: i.opcoes.map((codigo, idx) => ({
       ordem: idx + 1,
       assento: assentoId(codigo, i.grupamento, i.horario),
@@ -491,10 +530,23 @@ export interface PosicaoNaFila {
 
 export interface ResumoInscricao {
   protocolo: string;
+  /**
+   * Decomposição por bloco, com o teto visível e a separação entre o que já
+   * conta e o que passa a contar quando o documento for aceito. É o que a tela
+   * da pontuação renderiza — recalcular no cliente convida a divergência.
+   */
+  pontuacao: Pontuacao;
+  /** Pontos que ordenam a fila. Igual a `pontuacao.confirmados`. */
   pontos: number;
   pontuacaoMaxima: number;
+  reguaVersao: string;
+  reguaVigenciaProcessos: number;
   desempates: number[];
-  empatadaEmZero: boolean;
+  /**
+   * Nenhum critério, em nenhum bloco. Não é tela de fracasso: a inscrição vale,
+   * concorre, e o desempate passa a ser proximidade e sorteio auditável.
+   */
+  semCriterio: boolean;
   convite: PosicaoNaFila | null;
   filaDeMelhoria: PosicaoNaFila[];
   rodadaId: string;
@@ -516,6 +568,7 @@ export interface ResumoInscricao {
 export function resumoDaInscricao(insc: InscricaoViva): ResumoInscricao {
   const base = rodada();
   const eu = candidatoDeInscricao(insc);
+  const pontuacao = calcula(insc.itens);
 
   // Inserção incremental sobre a rodada base: mesma alocação que reprocessar as
   // 62.899 crianças (há teste provando a equivalência), em milissegundos.
@@ -592,10 +645,13 @@ export function resumoDaInscricao(insc: InscricaoViva): ResumoInscricao {
 
   return {
     protocolo: insc.protocolo,
-    pontos: eu.pontos,
-    pontuacaoMaxima: catalogo.pontuacaoMaxima,
+    pontuacao,
+    pontos: pontuacao.confirmados,
+    pontuacaoMaxima: PONTUACAO_MAXIMA,
+    reguaVersao: REGUA_VERSAO,
+    reguaVigenciaProcessos: REGUA_VIGENCIA_PROCESSOS,
     desempates: eu.desempates,
-    empatadaEmZero: eu.pontos === 0,
+    semCriterio: pontuacao.blocos.length === 0,
     convite,
     filaDeMelhoria,
     rodadaId: base.resultado.rodadaId,
@@ -904,6 +960,14 @@ export function distanciaKm(a: { lat: number; lng: number }, b: { lat: number; l
  * logradouro. Então não há como geocodificar a casa — e nem deveria haver. O
  * centróide do bairro é a melhor âncora disponível e é suficiente para ordenar
  * as creches por proximidade, que é para o que ele serve aqui.
+ *
+ * A chave é o **bairro canônico**, não o valor cru da base. Antes desta mudança
+ * `Andaraí`, `ANDARAÍ`, `Andaraí - Jamelão` e `Andaraí - Morro do Andaraí` eram
+ * quatro centróides distintos, cada um sobre um subconjunto arbitrário das
+ * unidades do bairro — e a família que escolhesse a variante "errada" no seletor
+ * recebia outra ordenação de creches, sem pista nenhuma de que havia escolhido
+ * errado. A canonicalização reduz os 252 valores de bairro do cadastro de
+ * unidades a 135 bairros oficiais, sem nenhum valor sem correspondência.
  */
 let _bairros: Map<string, { lat: number; lng: number; unidades: number }> | null = null;
 
@@ -911,8 +975,8 @@ export function centroidesDeBairro(): Map<string, { lat: number; lng: number; un
   if (_bairros) return _bairros;
   const acc = new Map<string, { lat: number; lng: number; unidades: number }>();
   for (const u of unidades) {
-    if (!u.bairro || u.lat === null || u.lng === null) continue;
-    const chave = u.bairro.trim();
+    const chave = bairroCanonico(u.bairro);
+    if (!chave || u.lat === null || u.lng === null) continue;
     const a = acc.get(chave) ?? { lat: 0, lng: 0, unidades: 0 };
     a.lat += u.lat;
     a.lng += u.lng;
@@ -927,6 +991,13 @@ export function centroidesDeBairro(): Map<string, { lat: number; lng: number; un
   return acc;
 }
 
+/**
+ * Bairros oferecidos quando o CEP não resolve.
+ *
+ * Cada bairro aparece **uma vez**, no nome oficial. As 1.607 variações da base
+ * ficam no dicionário de normalização, no servidor: o usuário nunca vê duas
+ * grafias do mesmo bairro.
+ */
 export function listaDeBairros(): string[] {
   return [...centroidesDeBairro().keys()].sort((a, b) => a.localeCompare(b, "pt-BR"));
 }
@@ -944,9 +1015,29 @@ export interface UnidadeEscolha {
   vagas: number;
   /** Quantas opções apontaram para este assento em 2025. */
   procura: number;
-  /** Candidatos por vaga, para a família decidir com informação. */
+  /** Candidatos por vaga. Métrica de gestão: não vai para a tela da família. */
   concorrencia: number;
   distanciaKm: number | null;
+  /** A distância aqui sai do centro da região, não da casa. */
+  geoAproximada: boolean;
+  /**
+   * Crianças à frente na fila deste assento, **contadas só sobre pontuação
+   * confirmada**. Mostrar a posição otimista de quem ainda não comprovou é o
+   * erro do processo atual com estética melhor: a família escolheria a creche
+   * disputada contando com pontos que talvez não se realizem.
+   */
+  aFrente: number | null;
+  /** Semáforo de chance. Sempre acompanhado da palavra, nunca só a cor. */
+  chance: "alta" | "media" | "longa" | null;
+  /** Posição que a família alcançaria se comprovasse tudo. Sempre abaixo da real. */
+  aFrenteSeComprovar: number | null;
+}
+
+/** Semáforo a partir da fila à frente e das vagas do assento. */
+function chanceDe(aFrente: number, vagas: number): "alta" | "media" | "longa" {
+  if (aFrente < vagas) return "alta";
+  if (aFrente < vagas * 3) return "media";
+  return "longa";
 }
 
 /**
@@ -959,8 +1050,29 @@ export function unidadesParaEscolha(
   grupamento: string,
   horario: Horario,
   bairroFamilia?: string | null,
+  /** Pontuação **confirmada**, para anotar a fila real de cada creche. */
+  pontosConfirmados?: number | null,
+  /** Confirmados mais o que falta comprovar, para a linha condicional em cinza. */
+  pontosComPendentes?: number | null,
 ): UnidadeEscolha[] {
-  const centro = bairroFamilia ? centroidesDeBairro().get(bairroFamilia.trim()) : undefined;
+  const canonico = bairroCanonico(bairroFamilia);
+  const centro = canonico ? centroidesDeBairro().get(canonico) : undefined;
+  const aproximada = geoAproximada(canonico);
+
+  // A fila à frente por assento sai da rodada base. É uma varredura sobre as
+  // ~160 mil preferências da fila, não sobre a matriz criança × assento.
+  const filaDe = (pontos: number | null | undefined) => {
+    if (pontos === null || pontos === undefined) return null;
+    const equivalente = equivalenteNaFila2025(pontos);
+    const conta = new Map<AssentoId, number>();
+    for (const c of rodada().parametros.candidatos) {
+      if (c.pontos <= equivalente) continue;
+      for (const pref of c.preferencias) conta.set(pref.assento, (conta.get(pref.assento) ?? 0) + 1);
+    }
+    return conta;
+  };
+  const filaReal = filaDe(pontosConfirmados);
+  const filaOtimista = pontosComPendentes && pontosComPendentes !== pontosConfirmados ? filaDe(pontosComPendentes) : null;
 
   const lista: UnidadeEscolha[] = [];
   for (const u of unidades) {
@@ -969,10 +1081,12 @@ export function unidadesParaEscolha(
     const d = centro && u.lat !== null && u.lng !== null
       ? Math.round(distanciaKm(centro, { lat: u.lat, lng: u.lng }) * 10) / 10
       : null;
+    const id = assentoId(u.codigo, grupamento, horario);
+    const aFrente = filaReal ? (filaReal.get(id) ?? 0) : null;
     lista.push({
       codigo: u.codigo,
       nome: u.nome,
-      bairro: u.bairro,
+      bairro: bairroCanonico(u.bairro),
       rua: u.rua,
       cre: u.cre,
       tipo: u.tipo,
@@ -980,6 +1094,10 @@ export function unidadesParaEscolha(
       procura: a.procura,
       concorrencia: Math.round((a.procura / a.capacidade) * 10) / 10,
       distanciaKm: d,
+      geoAproximada: aproximada,
+      aFrente,
+      chance: aFrente === null ? null : chanceDe(aFrente, a.capacidade),
+      aFrenteSeComprovar: filaOtimista ? (filaOtimista.get(id) ?? 0) : null,
     });
   }
 

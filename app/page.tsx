@@ -30,14 +30,51 @@ export default function Pagina() {
                 executada exatamente como está escrita. O que muda é a sequência das ofertas.
               </p>
 
+              {/*
+                Porta de entrada: em cinco segundos a pessoa sabe se está no
+                lugar certo e o que vai precisar. Antes de começar vem antes de
+                começar — não no meio do formulário, quando já é tarde para
+                buscar um documento.
+              */}
+              <div className="cartao mb-7 overflow-hidden">
+                <p className="cartao-titulo">Antes de começar</p>
+                <ul className="divide-y divide-linha">
+                  {[
+                    ["Conta gov.br", "é o que permite consultar seus dados e não digitar nada"],
+                    ["CPF ou certidão de nascimento da criança", "o CPF sai junto com a certidão"],
+                    ["CEP e número de onde a criança mora", "usamos para mostrar as creches mais perto"],
+                    ["Um celular que receba SMS", "a vaga pode sair em alguns meses"],
+                  ].map(([item, apoio]) => (
+                    <li key={item} className="px-4 py-2.5">
+                      <p className="text-[14.5px] font-bold">{item}</p>
+                      <p className="text-[13.5px] text-texto-3">{apoio}</p>
+                    </li>
+                  ))}
+                </ul>
+                <p className="border-t border-linha bg-cinza px-4 py-2.5 text-[13.5px] text-texto-2">
+                  Para crianças de 6 meses a 3 anos incompletos em 31 de março. Leva cerca de 5 minutos.
+                </p>
+              </div>
+
               <div className="flex flex-wrap gap-3">
                 <Link href="/inscricao" className="botao botao-primario">
-                  Fazer a inscrição
+                  Começar inscrição
                 </Link>
-                <Link href="/painel" className="botao botao-secundario">
-                  Painel da rede
+                <Link href="/como-funciona" className="botao botao-secundario">
+                  Como funciona
                 </Link>
               </div>
+              <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[13.5px]">
+                <Link href="/acompanhar" className="font-bold text-azul underline underline-offset-2">
+                  Acompanhar inscrição
+                </Link>
+                <Link href="/como-funciona#polos" className="font-bold text-azul underline underline-offset-2">
+                  Preciso de ajuda
+                </Link>
+                <Link href="/painel" className="font-bold text-azul underline underline-offset-2">
+                  Painel da rede
+                </Link>
+              </p>
             </div>
 
             {/* Quadro de números, no padrão de caixa de dados dos portais da PCRJ */}

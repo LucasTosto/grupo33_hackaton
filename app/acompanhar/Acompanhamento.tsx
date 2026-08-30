@@ -1,60 +1,78 @@
 "use client";
 
+/**
+ * Acompanhar a inscrição — responder "e a minha vaga?" sem ligar para ninguém.
+ *
+ * A linha do tempo é o que hoje não existe em 837 mil linhas de base: eventos
+ * com carimbo de hora, do lado da família. É a mesma tabela de eventos do painel
+ * da rede, filtrada por esta inscrição.
+ *
+ * A faixa de revalidação de contato é um toque, e é o que impede a inscrição de
+ * virar "cancelado pelo sistema" — o desfecho de 44,1% das opções de 2025. O
+ * ciclo pode levar treze meses; um número que mudou no meio do caminho é o
+ * bastante para a vaga não chegar.
+ *
+ * Não há banco: a rodada é reproduzível, então esta tela reenvia a inscrição
+ * guardada no aparelho e recebe a classificação recalculada sobre a fila do
+ * momento.
+ */
+
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-interface PosicaoNaFila {
-  assento: string;
-  unidade: { codigo: number; nome: string; bairro: string | null } | undefined;
-  grupamento: string;
-  horario: string;
-  ordemPreferencia: number;
-  capacidade: number;
-  aFrente: number;
-  concorrentes: number;
-  faixa: { de: number; ate: number };
-}
-
-interface Resumo {
-  protocolo: string;
-  pontos: number;
-  pontuacaoMaxima: number;
-  empatadaEmZero: boolean;
-  convite: PosicaoNaFila | null;
-  filaDeMelhoria: PosicaoNaFila[];
-  rodadaId: string;
-  duracaoMs: number;
-  totalCandidatos: number;
-  remanejadas: number;
-  propostasAvaliadas: number;
-  opcaoMantida: number;
-  explicacao: string;
-}
+import { BarraDePontuacao, DeOndeVemCadaPonto, SemCriterio, VersaoDaRegua } from "../inscricao/Pontuacao";
+import type { Comprovacao, Resumo } from "../inscricao/tipos";
 
 interface Guardada {
-  nascimento: string;
-  bairro: string;
-  horario: string;
-  opcoes: number[];
-  criterios: number[];
   protocolo: string;
+  nascimento: string;
+  cpfCrianca: string;
+  dnvCrianca: string;
+  cep: string;
+  numero: string;
+  bairro: string | null;
+  horario: string;
+  aceitaOutroTurno: boolean;
+  opcoes: number[];
+  itens: { grau: string; origem: "aferido" | "atestado" | "declarado" }[];
+  desempates: number[];
+  opcaoMantida: number;
+  contato: { celular: string; whatsapp: boolean; canal: string; verificado: boolean };
+  consentimento: { comum: boolean; sensivel: boolean };
+  crianca: string | null;
+  enviadaEm: string;
 }
 
-const CHAVE_LOCAL = "vaga-certa:inscricao";
+const CHAVE_ENVIADA = "vaga-certa:inscricao:enviada";
 const n = (v: number) => v.toLocaleString("pt-BR");
-const dec = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+
+function horaDe(iso: string) {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} ${d.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
+}
+
+function celularMascarado(d: string) {
+  if (d.length < 10) return d;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 3)}xxxx-${d.slice(-4)}`;
+}
 
 export default function Acompanhamento() {
   const [estado, setEstado] = useState<"carregando" | "sem-inscricao" | "pronto" | "erro">("carregando");
   const [resumo, setResumo] = useState<Resumo | null>(null);
+  const [comprovacoes, setComprovacoes] = useState<Comprovacao[]>([]);
+  const [guardada, setGuardada] = useState<Guardada | null>(null);
   const [erro, setErro] = useState("");
+  const [contatoConfirmado, setContatoConfirmado] = useState(false);
 
-  const consultar = useCallback(async (guardada: Guardada) => {
+  const consultar = useCallback(async (g: Guardada) => {
     try {
       const r = await fetch("/api/inscricao", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(guardada),
+        body: JSON.stringify(g),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -63,6 +81,7 @@ export default function Acompanhamento() {
         return;
       }
       setResumo(d.resumo);
+      setComprovacoes(d.comprovacoes ?? []);
       setEstado("pronto");
     } catch {
       setErro("Falha de rede ao consultar a inscrição.");
@@ -73,7 +92,7 @@ export default function Acompanhamento() {
   useEffect(() => {
     let bruto: string | null = null;
     try {
-      bruto = localStorage.getItem(CHAVE_LOCAL);
+      bruto = localStorage.getItem(CHAVE_ENVIADA);
     } catch {
       bruto = null;
     }
@@ -82,164 +101,226 @@ export default function Acompanhamento() {
       return;
     }
     try {
-      consultar(JSON.parse(bruto) as Guardada);
+      const g = JSON.parse(bruto) as Guardada;
+      setGuardada(g);
+      consultar(g);
     } catch {
       setEstado("sem-inscricao");
     }
   }, [consultar]);
 
-  const limpar = () => {
-    try {
-      localStorage.removeItem(CHAVE_LOCAL);
-    } catch {
-      // sem localStorage: nada a limpar
-    }
-    setResumo(null);
-    setEstado("sem-inscricao");
-  };
+  // Passados 90 dias sem confirmação, o contato precisa ser revalidado.
+  const diasDesdeEnvio = guardada
+    ? Math.floor((Date.now() - new Date(guardada.enviadaEm).getTime()) / 86_400_000)
+    : 0;
+  const precisaRevalidar = Boolean(guardada) && diasDesdeEnvio >= 90 && !contatoConfirmado;
 
   return (
     <div className="mx-auto max-w-4xl px-5 py-9">
-      <p className="rotulo mb-2 text-azul-medio">Consulta de inscrição</p>
+      <p className="rotulo mb-2 text-azul-medio">Acompanhar</p>
 
       {estado === "carregando" && (
         <>
-          <h1 className="mb-3 text-[clamp(24px,4.2vw,32px)] font-black tracking-[-0.025em] text-azul">
-            Consultando a fila…
+          <h1 className="mb-6 text-[clamp(24px,4.2vw,32px)] font-black tracking-[-0.025em] text-azul">
+            Consultando a sua inscrição…
           </h1>
-          <p className="text-[16px] text-texto-2">
-            Recalculando a classificação sobre a fila real do processo de 2025.
-          </p>
+          <div className="cartao overflow-hidden">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="border-b border-linha px-4 py-4 last:border-0">
+                <span className="block h-3.5 w-2/5 animate-pulse rounded bg-cinza" />
+                <span className="mt-2 block h-3 w-3/5 animate-pulse rounded bg-cinza" />
+              </div>
+            ))}
+          </div>
         </>
       )}
 
       {estado === "sem-inscricao" && (
         <>
-          <h1 className="mb-4 text-[clamp(24px,4.2vw,32px)] font-black tracking-[-0.025em] text-azul">
-            Nenhuma inscrição neste navegador.
+          <h1 className="mb-3 text-[clamp(24px,4.2vw,32px)] font-black tracking-[-0.025em] text-azul">
+            Não encontramos inscrição neste aparelho
           </h1>
-          <div className="tarja mb-6 max-w-[66ch]">
-            <p className="mb-3 text-[15.5px] text-texto-2">
-              Este protótipo não mantém banco de dados: a inscrição fica guardada no próprio navegador e é
-              reenviada ao motor para recalcular a posição. Como a rodada é determinística, a mesma inscrição
-              devolve sempre o mesmo resultado.
-            </p>
-            <p className="text-[14.5px] text-texto-3">
-              Em produção, a consulta seria pelo protocolo e pelo CPF do responsável, contra o registro da
-              inscrição — sem depender do navegador.
-            </p>
-          </div>
+          <p className="mb-6 max-w-[62ch] text-[16px] text-texto-2">
+            Este protótipo guarda a inscrição no próprio navegador. No serviço real você entraria com o gov.br, ou
+            informaria o protocolo, e a inscrição apareceria de qualquer aparelho.
+          </p>
           <Link href="/inscricao" className="botao botao-primario">
-            Fazer a inscrição
+            Fazer uma inscrição
           </Link>
         </>
       )}
 
       {estado === "erro" && (
         <>
-          <h1 className="mb-4 text-[clamp(24px,4.2vw,32px)] font-black tracking-[-0.025em] text-azul">
-            Não foi possível consultar.
+          <h1 className="mb-3 text-[clamp(24px,4.2vw,32px)] font-black tracking-[-0.025em] text-azul">
+            Não conseguimos consultar agora
           </h1>
           <div className="tarja mb-6 border-l-erro bg-erro-fundo" role="alert">
-            <p className="text-[15px]">{erro}</p>
+            <p className="text-[15px] text-texto-2">{erro}</p>
           </div>
-          <button type="button" onClick={limpar} className="botao botao-secundario">
-            Limpar e começar de novo
+          <button
+            type="button"
+            onClick={() => guardada && (setEstado("carregando"), consultar(guardada))}
+            className="botao botao-primario"
+          >
+            Tentar de novo
           </button>
         </>
       )}
 
-      {estado === "pronto" && resumo && (
+      {estado === "pronto" && resumo && guardada && (
         <>
           <h1 className="mb-3 text-[clamp(24px,4.2vw,32px)] font-black tracking-[-0.025em] text-azul">
-            {resumo.convite ? "Vaga reservada para a sua criança." : "Inscrição na fila de espera."}
+            {resumo.convite ? "Há uma vaga reservada" : "Na fila de espera"}
           </h1>
-          <p className="mb-7 max-w-[66ch] text-[16px] text-texto-2">{resumo.explicacao}</p>
+          <p className="mb-6 max-w-[66ch] text-[16px] text-texto-2">
+            {resumo.convite
+              ? `Há vaga na ${resumo.convite.ordemPreferencia}ª escolha, e ela está reservada para ${guardada.crianca ?? "a criança"}.`
+              : "Sua posição é atualizada sempre que abre vaga na rede."}
+          </p>
 
-          <div className="cartao mb-6 overflow-hidden">
-            <p className="cartao-titulo">Situação da inscrição</p>
-            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-linha bg-azul-10 px-4 py-3.5">
-              <span className="rotulo text-azul">Número do protocolo</span>
-              <span className="num font-mono text-[20px] font-medium text-azul">{resumo.protocolo}</span>
-            </div>
-            <dl className="divide-y divide-linha">
-              <Item rotulo="Pontuação">
-                <span className="num">
-                  {resumo.pontos} de {resumo.pontuacaoMaxima}
-                </span>
-                {resumo.empatadaEmZero && (
-                  <span className="mt-1 block text-[13.5px] text-texto-3">
-                    Empatada com 93,8% da fila.
-                  </span>
-                )}
-              </Item>
-              <Item rotulo="Identificador da rodada">
-                <span className="num font-mono text-[13px]">{resumo.rodadaId}</span>
-              </Item>
-              <Item rotulo="Recalculada agora">
-                <span className="num">{n(resumo.totalCandidatos)}</span> crianças na fila ·{" "}
-                <span className="num">{dec(resumo.duracaoMs)} ms</span>
-              </Item>
-            </dl>
-          </div>
-
-          {resumo.convite && (
-            <div className="cartao mb-6 overflow-hidden border-ok">
-              <p className="cartao-titulo bg-ok">
-                Convite emitido · {resumo.convite.ordemPreferencia}ª opção
+          {precisaRevalidar && (
+            <div className="tarja mb-6 border-l-atencao bg-atencao-fundo">
+              <p className="rotulo mb-1 text-atencao">Confirme o seu celular</p>
+              <p className="mb-3 max-w-[62ch] text-[14.5px] text-texto-2">
+                Seu celular ainda é {celularMascarado(guardada.contato.celular)}? Sem um número que atenda, a vaga
+                não chega.
               </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setContatoConfirmado(true)}
+                  className="botao botao-primario !min-h-[48px] !px-4 !text-[12px]"
+                >
+                  Sim, é este
+                </button>
+                <Link href="/inscricao" className="botao botao-secundario !min-h-[48px] !px-4 !text-[12px]">
+                  Trocar
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* ── linha do tempo ── */}
+          <section className="mb-7">
+            <h2 className="secao-titulo mb-3">Linha do tempo</h2>
+            <ol className="cartao divide-y divide-linha overflow-hidden">
+              <Evento estado="feito" quando={horaDe(guardada.enviadaEm)}>
+                Inscrição registrada · protocolo <span className="num font-mono">{resumo.protocolo}</span>
+              </Evento>
+              <Evento estado="feito" quando={horaDe(guardada.enviadaEm)}>
+                Pontuação confirmada: <span className="num">{resumo.pontuacao.confirmados} pontos</span>
+              </Evento>
+              {comprovacoes.map((c) => (
+                <Evento key={c.grau} estado="falta" quando="——">
+                  {c.rotulo}: falta enviar
+                  <Link
+                    href="/inscricao"
+                    className="ml-2 font-bold text-azul underline underline-offset-2"
+                  >
+                    Enviar
+                  </Link>
+                </Evento>
+              ))}
+              {resumo.filaDeMelhoria.map((p) => (
+                <Evento key={p.assento} estado="futuro" quando="——">
+                  Aguardando vaga · entre <span className="num">{n(p.faixa.de)}</span> e{" "}
+                  <span className="num">{n(p.faixa.ate)}</span> na fila da {p.ordemPreferencia}ª escolha
+                </Evento>
+              ))}
+              {resumo.convite && (
+                <Evento estado="feito" quando={horaDe(new Date().toISOString())}>
+                  Vaga disponível em {resumo.convite.unidade?.nome ?? resumo.convite.assento}
+                </Evento>
+              )}
+            </ol>
+          </section>
+
+          {/* ── convite ativo ── */}
+          {resumo.convite && (
+            <div className="cartao mb-7 overflow-hidden border-ok bg-ok-fundo/40">
+              <p className="cartao-titulo bg-ok">Convite ativo · responda em 3 dias</p>
               <div className="p-4">
                 <p className="text-[19px] font-bold text-azul">
                   {resumo.convite.unidade?.nome ?? resumo.convite.assento}
                 </p>
                 <p className="mt-1 text-[14.5px] text-texto-2">
-                  {resumo.convite.unidade?.bairro} · {resumo.convite.grupamento} · {resumo.convite.horario}
+                  {resumo.convite.unidade?.bairro} ·{" "}
+                  {resumo.convite.horario === "Integral" ? "dia inteiro" : "meio período"}
                 </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button type="button" className="botao botao-primario !min-h-[48px] !px-4 !text-[12px]">
+                    Aceitar a vaga
+                  </button>
+                  <button type="button" className="botao botao-secundario !min-h-[48px] !px-4 !text-[12px]">
+                    Recusar
+                  </button>
+                </div>
+                {/* A consequência de cada escolha, dita antes do toque. */}
+                <ul className="mt-3 space-y-1 border-t border-linha pt-3 text-[13.5px] text-texto-2">
+                  <li>
+                    <strong className="text-texto">Aceitar:</strong> a matrícula é garantida, e você continua na
+                    lista de espera da {resumo.opcaoMantida}ª escolha.
+                  </li>
+                  <li>
+                    <strong className="text-texto">Recusar:</strong> a vaga passa para a próxima criança da fila e
+                    a inscrição volta a aguardar.
+                  </li>
+                </ul>
               </div>
             </div>
           )}
 
-          {resumo.filaDeMelhoria.length > 0 && (
-            <section className="mb-7">
-              <h2 className="secao-titulo mb-2">Fila de melhoria</h2>
-              <p className="mb-3 max-w-[66ch] text-[14.5px] text-texto-2">
-                {resumo.convite
-                  ? "As opções melhores continuam valendo. Se abrir vaga, o remanejamento é automático e a vaga atual passa para a próxima criança."
-                  : "Estas são as vagas em disputa, recalculadas a cada vaga liberada na rede."}
-              </p>
-              <ul className="cartao divide-y divide-linha overflow-hidden">
-                {resumo.filaDeMelhoria.map((p) => (
-                  <li key={p.assento} className="flex items-baseline gap-3 px-4 py-3">
-                    <span className="num flex size-8 shrink-0 items-center justify-center rounded bg-cinza text-[14px] font-bold text-azul">
-                      {p.ordemPreferencia}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[15px] font-bold">{p.unidade?.nome ?? p.assento}</span>
-                      <span className="num block text-[12.5px] text-texto-3">
-                        posição estimada entre {n(p.faixa.de)} e {n(p.faixa.ate)} · {p.capacidade} vagas ·{' '}
-                        {n(p.concorrentes)} disputando
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+          {/* ── pontuação ── */}
+          <section className="mb-7">
+            <h2 className="secao-titulo mb-3">Sua pontuação</h2>
+            <BarraDePontuacao pontuacao={resumo.pontuacao} />
+            <div className="mt-5">
+              {resumo.pontuacao.blocos.length === 0 ? (
+                <SemCriterio />
+              ) : (
+                <DeOndeVemCadaPonto pontuacao={resumo.pontuacao} />
+              )}
+            </div>
+            <VersaoDaRegua versao={resumo.reguaVersao} vigencia={resumo.reguaVigenciaProcessos} />
+          </section>
 
-          <button type="button" onClick={limpar} className="botao botao-secundario">
-            Esquecer esta inscrição
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => (setEstado("carregando"), consultar(guardada))}
+              className="botao botao-secundario"
+            >
+              Atualizar
+            </button>
+            <Link href="/como-funciona" className="botao botao-secundario">
+              Como a pontuação é calculada
+            </Link>
+          </div>
         </>
       )}
     </div>
   );
 }
 
-function Item({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
+function Evento({
+  estado,
+  quando,
+  children,
+}: {
+  estado: "feito" | "falta" | "futuro";
+  quando: string;
+  children: React.ReactNode;
+}) {
+  const sinal = { feito: "●", falta: "○", futuro: "○" }[estado];
+  const cor = { feito: "text-ok", falta: "text-atencao", futuro: "text-texto-3" }[estado];
   return (
-    <div className="flex flex-wrap gap-x-6 gap-y-1 px-4 py-3">
-      <dt className="rotulo min-w-[160px] pt-1">{rotulo}</dt>
-      <dd className="flex-1 text-[15px]">{children}</dd>
-    </div>
+    <li className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-3">
+      <span aria-hidden className={`${cor} text-[13px]`}>
+        {sinal}
+      </span>
+      <span className="num min-w-[105px] text-[12.5px] text-texto-3">{quando}</span>
+      <span className="flex-1 text-[14.5px] text-texto-2">{children}</span>
+    </li>
   );
 }
