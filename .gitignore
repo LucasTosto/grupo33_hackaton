@@ -1,0 +1,28 @@
+node_modules/
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+.env
+.env*.local
+.vercel
+
+.DS_Store
+*.pem
+npm-debug.log*
+
+# Semente completa da fila (44 MB), derivada das bases da SME.
+# Reproduzível com `npm run seeds`; a aplicação usa a versão compacta versionada.
+lib/data/fila-seed.json
+
+# Regras de agente geradas pelo Next 16 (boilerplate, não é material do projeto)
+AGENTS.md
+CLAUDE.md
+
+# Packs de skills das ferramentas locais de cada dev, não artefatos do projeto
+.agents/
+.claude/
+.cursor/
+.windsurf/

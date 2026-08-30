@@ -1,0 +1,28 @@
+{
+  "name": "vaga-certa-rio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Inscrição em creche da rede municipal do Rio com alocação determinística e auditável",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "node --test test/*.test.ts",
+    "seeds": "python scripts/extract_seeds.py && python scripts/compacta_fila.py && python scripts/capacidade_real.py",
+    "backtest": "node scripts/backtest.ts"
+  },
+  "dependencies": {
+    "next": "^16.3.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.1.13",
+    "@types/node": "24.5.2",
+    "@types/react": "19.1.13",
+    "@types/react-dom": "19.1.9",
+    "tailwindcss": "4.1.13",
+    "typescript": "5.9.2"
+  }
+}

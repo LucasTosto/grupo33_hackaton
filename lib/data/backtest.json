@@ -1,0 +1,62 @@
+{
+ "gerardoEm": "2026-08-30T16:08:56.939Z",
+ "processo": {
+  "prmId": 195,
+  "ano": 2025
+ },
+ "fonte": "CIT-SME-RJ/dadoscreche — Query A e Query B do processo 195",
+ "metodo": "Mesma fila e mesma capacidade do processo real. A capacidade de cada assento é o número de crianças que a rede efetivamente matriculou nele em 2025, então o motor não pode alocar em vaga que não existia.",
+ "rodada": {
+  "rodadaId": "r-195.1-9695666c1cc4",
+  "hashEntrada": "9695666c1cc4c6598e17f6a8f90129234baf8954f2f6552c799f80df60b17a4b",
+  "semente": "D.O.-RIO-2025-08-30-processo-195",
+  "catalogoVersao": "195.1",
+  "inscricoes": 71949,
+  "criancas": 62899,
+  "assentos": 2114,
+  "vagas": 48688,
+  "propostas": 94387,
+  "duracaoMs": 3766,
+  "verificacaoMs": 1143,
+  "violacoes": 0
+ },
+ "historico": {
+  "vagasPreenchidas": 48688,
+  "assentosReservados": 66686,
+  "reservasSemMatricula": 17998,
+  "criancasComMaisDeUmAssento": 7256,
+  "assentosTravados": 11926,
+  "porOpcao": {
+   "1": 35144,
+   "2": 7553,
+   "3": 3505,
+   "4": 1589,
+   "5": 897
+  },
+  "primeiraOpcaoPct": 72.2
+ },
+ "motor": {
+  "vagasPreenchidas": 47847,
+  "criancasAtendidas": 47847,
+  "assentosReservados": 47847,
+  "reservasSemMatricula": 0,
+  "criancasComMaisDeUmAssento": 0,
+  "assentosTravados": 0,
+  "semAssento": 15052,
+  "porOpcao": {
+   "1": 38131,
+   "2": 6165,
+   "3": 2170,
+   "4": 912,
+   "5": 439,
+   "6": 29,
+   "7": 1
+  },
+  "primeiraOpcaoPct": 79.7
+ },
+ "ganhos": {
+  "assentosLiberadosDeImediato": 11926,
+  "criancasQueDeixamDeReterVaga": 7256,
+  "pontosDeAumentoNaPrimeiraOpcao": 7.5
+ }
+}

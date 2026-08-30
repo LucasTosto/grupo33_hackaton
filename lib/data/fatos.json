@@ -1,0 +1,71 @@
+{
+ "processo": {
+  "prmId": 195,
+  "ano": 2025
+ },
+ "inscricoes": 71949,
+ "linhasOpcao": 159979,
+ "criancas": 62899,
+ "unidadesProcuradas": 836,
+ "declararamCriterio": 49094,
+ "declararamCriterioPct": 68.2,
+ "comprovaramCriterio": 4444,
+ "comprovaramCriterioPct": 6.2,
+ "empatadosEmZero": 67505,
+ "empatadosEmZeroPct": 93.8,
+ "ofertasSimultaneas": {
+  "criancasOfertadas": 54760,
+  "criancasComMaisDeUmaOferta": 7256,
+  "assentosRetidos": 11926
+ },
+ "taxaPorOpcao": [
+  {
+   "opcao": 1,
+   "linhas": 71949,
+   "taxaConfirmado": 48.8
+  },
+  {
+   "opcao": 2,
+   "linhas": 38114,
+   "taxaConfirmado": 19.8
+  },
+  {
+   "opcao": 3,
+   "linhas": 25350,
+   "taxaConfirmado": 13.8
+  },
+  {
+   "opcao": 4,
+   "linhas": 15000,
+   "taxaConfirmado": 10.6
+  },
+  {
+   "opcao": 5,
+   "linhas": 9566,
+   "taxaConfirmado": 9.4
+  }
+ ],
+ "foraDoBairroPorOpcao": [
+  {
+   "opcao": 1,
+   "foraDoBairro": 48.3
+  },
+  {
+   "opcao": 2,
+   "foraDoBairro": 52.7
+  },
+  {
+   "opcao": 3,
+   "foraDoBairro": 54.4
+  },
+  {
+   "opcao": 4,
+   "foraDoBairro": 59.1
+  },
+  {
+   "opcao": 5,
+   "foraDoBairro": 61.1
+  }
+ ],
+ "fonte": "CIT-SME-RJ/dadoscreche - processo 195 (2025)"
+}

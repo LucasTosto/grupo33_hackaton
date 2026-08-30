@@ -1,0 +1,113 @@
+{
+ "processoId": 195,
+ "ano": 2025,
+ "versao": "195.1",
+ "fonte": "03_QueryC_PerguntasComDescricao.csv - SME/RJ",
+ "pontuacaoMaxima": 100,
+ "criterios": [
+  {
+   "pergId": 28,
+   "ichPergId": 275,
+   "ordem": 1,
+   "texto": "Criança cuja família seja inscrita no CadÚnico (Cadastro Único para Programas Sociais)?",
+   "pontos": 51,
+   "desempate": false
+  },
+  {
+   "pergId": 31,
+   "ichPergId": 288,
+   "ordem": 2,
+   "texto": "A criança é público-alvo da educação especial?",
+   "pontos": 25,
+   "desempate": false
+  },
+  {
+   "pergId": 6,
+   "ichPergId": 289,
+   "ordem": 3,
+   "texto": "Faz parte do programa bolsa família ou possui Cartão Carioca?",
+   "pontos": 2,
+   "desempate": false
+  },
+  {
+   "pergId": 17,
+   "ichPergId": 290,
+   "ordem": 4,
+   "texto": "A criança e/ou familiar do seu convívio diário é vitima de violência doméstica?",
+   "pontos": 4,
+   "desempate": false
+  },
+  {
+   "pergId": 20,
+   "ichPergId": 291,
+   "ordem": 5,
+   "texto": "A criança pertence a família monoparental?",
+   "pontos": 4,
+   "desempate": false
+  },
+  {
+   "pergId": 25,
+   "ichPergId": 280,
+   "ordem": 6,
+   "texto": "Candidato tem pais ou responsáveis deficientes ?",
+   "pontos": 3,
+   "desempate": false
+  },
+  {
+   "pergId": 18,
+   "ichPergId": 281,
+   "ordem": 7,
+   "texto": "A criança e/ou alguém do núcleo familiar apresentam doenças crônicas graves?",
+   "pontos": 3,
+   "desempate": false
+  },
+  {
+   "pergId": 16,
+   "ichPergId": 282,
+   "ordem": 8,
+   "texto": "Existe algum membro do núcleo familiar que faz uso abusivo de drogas e/ou alcoól?",
+   "pontos": 2,
+   "desempate": false
+  },
+  {
+   "pergId": 12,
+   "ichPergId": 283,
+   "ordem": 9,
+   "texto": "Existe algum membro do núcleo familiar que é presidiário ou ex-presidiário nos últimos 5 anos?",
+   "pontos": 2,
+   "desempate": false
+  },
+  {
+   "pergId": 23,
+   "ichPergId": 284,
+   "ordem": 10,
+   "texto": "O candidato é refugiado?",
+   "pontos": 2,
+   "desempate": false
+  },
+  {
+   "pergId": 27,
+   "ichPergId": 285,
+   "ordem": 11,
+   "texto": "Criança aguardou em fila de espera no ano anterior sem ter sido atendida?",
+   "pontos": 2,
+   "desempate": false
+  },
+  {
+   "pergId": 29,
+   "ichPergId": 286,
+   "ordem": 12,
+   "texto": "O Candidato possui irmão matriculado na rede pública ou parceria?",
+   "pontos": 0,
+   "desempate": true
+  },
+  {
+   "pergId": 30,
+   "ichPergId": 287,
+   "ordem": 13,
+   "texto": "O Candidato possui pais ou responsáveis com idade menor que 18 anos?",
+   "pontos": 0,
+   "desempate": true
+  }
+ ]
+}
