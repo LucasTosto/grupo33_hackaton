@@ -5,7 +5,7 @@
 - **Equipe:** Seed 33
 - **Grupo nº:** 33
 - **Membros:** Camila Nascimento, João Assumpção, Pedro Moradillo, Lucas Tosto
-- **Aplicação:** `PREENCHER — URL da Vercel`
+- **Aplicação:** **https://grupo33-hackathon.vercel.app**
 - **Vídeo demo (60s):** `PREENCHER`
 
 ---
