@@ -11,6 +11,7 @@ import "server-only";
 
 import backtestJson from "./data/backtest.json";
 import catalogoJson from "./data/catalogo-2025.json";
+import desempateJson from "./data/desempate.json";
 import fatosJson from "./data/fatos.json";
 import filaJson from "./data/fila-2025.json";
 import unidadesJson from "./data/unidades.json";
@@ -112,11 +113,116 @@ export interface Fatos {
 /** Semente do processo. Em produção seria publicada no D.O. antes da rodada. */
 export const SEMENTE = process.env.SEMENTE_SORTEIO ?? "D.O.-RIO-2025-08-30-processo-195";
 
-/** Ordem de precedência dos critérios de desempate, conforme o catálogo. */
-export const ORDEM_DESEMPATE = catalogo.criterios
-  .filter((c) => c.desempate)
-  .sort((a, b) => a.ordem - b.ordem)
-  .map((c) => c.pergId);
+// ──────────────────────────────────────────────────── vetor de desempate
+
+export interface NivelDesempate {
+  nivel: number;
+  chave: string;
+  rotulo: string;
+  sentido: "maior_primeiro" | "menor_primeiro";
+  ativo: boolean;
+  pergIds?: number[];
+  bloqueio?: string;
+  parametros?: Record<string, unknown>;
+  observacao?: string;
+}
+
+export interface VetorDesempate {
+  versao: string;
+  processoId: number;
+  ano: number;
+  fonte: string;
+  instrumentoNormativo: { proximidade: string; observacao: string };
+  vetor: NivelDesempate[];
+  niveisImplementados: string[];
+}
+
+export const desempate = desempateJson as unknown as VetorDesempate;
+
+/**
+ * O vetor de desempate é parâmetro versionado, não código.
+ *
+ * O instrumento normativo que institui a proximidade como desempate está a
+ * confirmar. Deixar a sequência num arquivo com vigência e versão significa que
+ * a confirmação, quando vier, é mudança de dado — não de deploy. E significa que
+ * nada aqui fica travado esperando resposta: o nível existe, declarado e
+ * inativo, com o motivo do bloqueio registrado.
+ *
+ * A validação abaixo é deliberadamente ruidosa. Marcar como ativo um nível que
+ * o motor não implementa produziria uma rodada silenciosamente errada — que é
+ * pior do que uma rodada que não roda.
+ */
+function validaVetor(v: VetorDesempate): NivelDesempate[] {
+  const implementados = new Set(v.niveisImplementados);
+  const ativos = v.vetor.filter((n) => n.ativo).sort((a, b) => a.nivel - b.nivel);
+
+  for (const n of ativos) {
+    if (!implementados.has(n.chave)) {
+      throw new Error(
+        `vetor de desempate v${v.versao}: o nível "${n.chave}" está marcado como ativo mas não é ` +
+          `implementado pelo motor. Implemente-o ou volte "ativo" para false. ` +
+          `Motivo registrado do bloqueio: ${n.bloqueio ?? "não informado"}.`,
+      );
+    }
+  }
+
+  const criterios = ativos.find((n) => n.chave === "criterios_resolucao");
+  if (criterios && !criterios.pergIds?.length) {
+    throw new Error(`vetor de desempate v${v.versao}: nível "criterios_resolucao" sem pergIds.`);
+  }
+  return ativos;
+}
+
+const NIVEIS_ATIVOS = validaVetor(desempate);
+
+/** Níveis declarados mas não em vigor, com o motivo. Vai para o painel e o D.O. */
+export const NIVEIS_INATIVOS = desempate.vetor
+  .filter((n) => !n.ativo)
+  .map((n) => ({ chave: n.chave, rotulo: n.rotulo, bloqueio: n.bloqueio ?? "não informado" }));
+
+/**
+ * Ordem de precedência dos critérios de desempate da Resolução.
+ *
+ * Vem do vetor versionado, conferida contra o catálogo: se o arquivo listar um
+ * pergId que o catálogo não marca como critério de desempate, é erro de
+ * parametrização e não deve virar rodada.
+ */
+export const ORDEM_DESEMPATE: number[] = (() => {
+  const nivel = NIVEIS_ATIVOS.find((n) => n.chave === "criterios_resolucao");
+  const doVetor = nivel?.pergIds ?? [];
+  const noCatalogo = new Set(catalogo.criterios.filter((c) => c.desempate).map((c) => c.pergId));
+  for (const p of doVetor) {
+    if (!noCatalogo.has(p)) {
+      throw new Error(
+        `vetor de desempate v${desempate.versao}: pergId ${p} não é critério de desempate no ` +
+          `catálogo v${catalogo.versao}.`,
+      );
+    }
+  }
+  return doVetor;
+})();
+
+/** Sequência em vigor, para exibir na tela e no documento publicado. */
+export const SEQUENCIA_DESEMPATE = NIVEIS_ATIVOS.map((n) => n.rotulo);
+
+/**
+ * A lacuna entre declarar e aparecer com pontuação.
+ *
+ * O denominador é o total de inscrições do processo, não o subconjunto que
+ * declarou. Dito sobre os declarantes o número seria 90,9%, e não 62% — a
+ * distinção importa porque este é um número que vai a público.
+ *
+ * O que ele mede é o que a extração expõe, não a causa. Ver a ressalva que
+ * acompanha toda exibição dele.
+ */
+export const LACUNA_COMPROVACAO = {
+  inscricoes: fatosJson.declararamCriterio - fatosJson.comprovaramCriterio,
+  pctDoTotal:
+    Math.round((1000 * (fatosJson.declararamCriterio - fatosJson.comprovaramCriterio)) / fatosJson.inscricoes) / 10,
+  pctDosDeclarantes:
+    Math.round((1000 * (fatosJson.declararamCriterio - fatosJson.comprovaramCriterio)) / fatosJson.declararamCriterio) /
+    10,
+};
 
 export const GRUPAMENTOS = ["Berçário", "Maternal I", "Maternal II"] as const;
 export const HORARIOS: Horario[] = ["Integral", "Parcial"];

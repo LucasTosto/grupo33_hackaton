@@ -65,11 +65,22 @@ assentos** que ninguém mais podia disputar enquanto o prazo corria.
 
 **P2 — A régua de pontuação praticamente não classifica.**
 68,2% das inscrições declararam ao menos um critério de prioridade, mas apenas 6,2% chegaram à
-classificação com pontuação acima de zero. O campo de confirmação da base é uniforme dentro da
-inscrição em 96,7% dos casos: ele não marca critério a critério, marca se a família compareceu para
-comprovar. Quem não vai perde tudo de uma vez.
-*Impacto:* **67.505 inscrições (93,8%) entram na fila empatadas em zero ponto.** Quem ordena a fila,
-na prática, é o critério de desempate — e ele não é publicado nem reproduzível hoje.
+classificação com pontuação acima de zero.
+
+> **Formulação obrigatória deste achado.** No campo que a extração expõe como comprovação, **62% de
+> todas as inscrições declararam critério e aparecem com zero ponto** (44.650 de 71.949). Ou é perda
+> real de pontuação, ou a validação automática não está sendo registrada de forma auditável. **Não
+> sabemos qual** — é a primeira pergunta para a equipe de dados da SME (Q7), e a solução resolve os
+> dois casos: se é perda real, o funil de comprovação automática (F3) recupera; se é registro, a
+> rodada versionada passa a deixar rastro auditável por critério.
+>
+> O denominador importa: dito sobre os declarantes, o número seria **90,9%**, não 62%. Este documento
+> usa sempre o total de inscrições. O campo `confirmado` é uniforme dentro da inscrição em 96,7% dos
+> casos, o que é compatível com as duas leituras e por isso não decide entre elas.
+
+*Impacto, e este não depende da resposta a Q7:* **67.505 inscrições (93,8%) entram na fila empatadas
+em zero ponto.** Quem ordena a fila, na prática, é o critério de desempate — e ele não é publicado
+nem reproduzível hoje.
 
 **P3 — Reservas que não viram matrícula.**
 66.686 assentos foram reservados em algum momento do processo de 2025 para 48.688 matrículas
@@ -628,13 +639,18 @@ Não é conflito a resolver, é ambiguidade a nomear:
   matriculou em cada assento naquele processo. É a definição correta para o **backtest**: mesma fila,
   mesma capacidade, o motor não pode ganhar inventando vaga que não existia. E é a condição que o
   próprio critério de avaliação exige — crianças sem alocação tem de ser idêntico ao histórico.
-- **`turmas × 25 − alunos` (usada no mapa de vacância, V2).** Quanto ainda **cabe** hoje em cada
-  assento, com 25 como lotação de referência do percentil 90 da própria rede. É a definição correta
-  para responder *"onde ainda há vaga agora"*.
+- **`turmas × lotação − alunos` (usada no mapa de vacância, V2).** Quanto ainda **cabe** hoje em cada
+  assento. É a definição correta para responder *"onde ainda há vaga agora"*.
 
-**Decisão:** V1 mantém `confirmados 2025` na classificação; o mapa de vacância adota
-`turmas × 25 − alunos` como estoque ofertável, com rótulo explícito de que é estimativa. Em produção
-**nenhuma das duas é estimada**: o teto vem do parâmetro de vagas da parametrização do processo.
+**Decisão (Q8, resolvida):** V1 mantém `confirmados 2025` como **referência observada** na
+classificação; o mapa de vacância adota `turmas × lotação − alunos`, onde `lotação` é **campo de
+parametrização editável**, com valor inicial de **lotação de referência (p90 observado = 25),
+ajustável**.
+
+**Nenhuma das duas deve ser chamada de capacidade real.** São referências observadas, escolhidas por
+serem verificáveis na base disponível. Em produção nenhuma é estimada: o teto vem do parâmetro de
+vagas da parametrização do processo, e a lotação editável é o que permite ao gestor corrigir por
+unidade sem alterar código.
 
 ### Ressalvas que acompanham qualquer número deste documento
 
@@ -900,14 +916,14 @@ pronto.
 
 | # | Questão | Contexto | Decisor | Impacto |
 | --- | --- | --- | --- | --- |
-| Q1 | **A proximidade cabe no rol de desempate da Resolução ou exige alteração normativa?** | A Resolução 542 já prevê desempates próprios (irmão matriculado, responsável < 18). A pergunta é se o rol é taxativo e se está no texto da Resolução ou remetido ao edital de cada processo | Jurídico SME | Muda o prazo de F5 de semanas para meses. **Bloqueia F5** |
+| Q1 | ~~A proximidade cabe no rol de desempate da Resolução?~~ | **✅ Resolvida 2026-08-30 — não bloqueia mais nada.** A sequência saiu do código e virou `lib/data/desempate.json`, lido em runtime: `social → critérios da Resolução → proximidade → sorteio`. O nível de proximidade fica **declarado e inativo**, com o motivo do bloqueio no próprio dado. Quando o instrumento normativo for confirmado, muda-se o arquivo e a vigência, sem deploy. O carregador falha alto se um nível não implementado for ativado | Engenharia | **Desbloqueado.** F5 deixa de depender de resposta jurídica para começar |
 | Q2 | **Como validar o local de trabalho do tutor?** | Se pontua e não é verificável, vira a principal superfície de fraude. eSocial/CNIS só cobrem trabalho formal — excluiria a população informal | Produto + Jurídico | Define se `α` fica em 0,7, cai a zero, ou se o campo sai |
 | Q3 | **Qual o caminho de manifestação para quem não tem acesso digital?** | O desenho reconhece a limitação no Período 2 e volta a exigir app no Período 4 | Produto + SME | **Bloqueia F6.** Sem resposta, F6 reintroduz a exclusão que F3 removeu |
 | Q4 | **Haverá permanência mínima após ocupar vaga de vacância?** | A criança cria vínculo e depois muda quando a opção mantida abre | Pedagógico SME | Define regra de edital do mapa |
 | Q5 | **Vale antecipar a rodada quando a vaga libera antes da sexta?** | Recusa explícita na segunda deixa o assento ocioso até a sexta | Operação SME | Cascata intra-semana para recusas explícitas recupera dias sem quebrar a previsibilidade |
 | Q6 | **O que acontece com quem completa a idade fora do período de inscrição?** | Crianças fazem seis meses o ano inteiro. Se as rodadas continuam durante o ano letivo, a inscrição precisa de porta contínua | Produto + SME | Sem isso, quem nasce em abril espera o próximo ciclo |
-| Q7 | **A descontinuidade da comprovação (88,9% em 2021 → 8–11% depois) é processo ou extração?** | Muda a leitura de P2 | Equipe de dados SME | **Bloqueia uso público do número de 62 p.p.** |
-| Q8 | **Qual o parâmetro real de vagas por assento?** | V1 estima; produção tem o parâmetro da parametrização do processo | Gerência de Matrícula | **Bloqueia F1** e qualquer uso operacional |
+| Q7 | **A descontinuidade da comprovação (88,9% em 2021 → 8–11% depois) é processo ou extração?** | **✅ Tratada 2026-08-30 na forma de comunicar, mas segue aberta no mérito.** Nenhum material afirma "62% perdem pontuação" como fato. A formulação em vigor está em §2/P2: o número descreve o que a extração expõe, com as duas leituras possíveis explícitas. Continua sendo a primeira pergunta à equipe de dados | Equipe de dados SME | **Deixa de bloquear a comunicação.** Segue relevante para dimensionar F3 |
+| Q8 | ~~Qual o parâmetro real de vagas por assento?~~ | **✅ Resolvida 2026-08-30.** A lotação é campo de parametrização editável, não constante de código. Valor inicial: **lotação de referência (p90 observado = 25), ajustável**. Nenhum material chama qualquer das duas referências de capacidade real — ver §6 | Gerência de Matrícula | **Desbloqueado.** F1 passa a ser troca de parâmetro, não mudança de modelo |
 
 ---
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { backtest, catalogo, fatos } from "@/lib/dados";
+import { backtest, catalogo, fatos, LACUNA_COMPROVACAO as lacuna, NIVEIS_INATIVOS, SEQUENCIA_DESEMPATE } from "@/lib/dados";
 
 const n = (v: number) => v.toLocaleString("pt-BR");
 const dec = (v: number) =>
@@ -73,16 +73,23 @@ export default function Pagina() {
 
           <div className="grid gap-6 md:grid-cols-[1fr_1fr]">
             <div className="tarja border-l-atencao">
-              <p className="rotulo mb-2 text-atencao">Declarar não é comprovar</p>
+              <p className="rotulo mb-2 text-atencao">Declarar não é aparecer com pontuação</p>
               <p className="mb-3 text-[15.5px] text-texto-2">
                 <strong className="text-texto">{dec(fatos.declararamCriterioPct)}%</strong> das inscrições
                 declararam ao menos um critério de prioridade. Apenas{" "}
                 <strong className="text-texto">{dec(fatos.comprovaramCriterioPct)}%</strong> chegaram à
-                classificação com pontuação acima de zero. O campo de confirmação não marca critério a
-                critério: marca se a família compareceu para comprovar.
+                classificação com pontuação acima de zero.
+              </p>
+              <p className="mb-3 text-[15.5px] text-texto-2">
+                No campo que a extração expõe como comprovação,{" "}
+                <strong className="text-texto">{dec(lacuna.pctDoTotal)}% de todas as inscrições</strong>{" "}
+                declararam critério e aparecem com zero ponto. Ou é perda real de pontuação, ou a validação
+                automática não está sendo registrada de forma auditável.{" "}
+                <strong className="text-texto">Não sabemos qual</strong> — é a primeira pergunta para a
+                equipe de dados da SME, e a solução resolve os dois casos.
               </p>
               <p className="text-[15.5px] text-texto-2">
-                Resultado:{" "}
+                O que não depende dessa resposta:{" "}
                 <strong className="text-texto">
                   {n(fatos.empatadosEmZero)} inscrições entram empatadas em zero ponto
                 </strong>
@@ -217,9 +224,43 @@ export default function Pagina() {
             </Garantia>
             <Garantia titulo="A política não muda">
               A ordem de prioridade da Resolução é executada como está escrita. As {catalogo.criterios.length}{" "}
-              perguntas e seus pesos são dado versionado, não código.
+              perguntas, seus pesos e a sequência de desempate são dado versionado, não código.
             </Garantia>
           </ul>
+
+          {/* O vetor de desempate, à vista. É o que sustenta a frase de que ele é
+              parâmetro e não código — inclusive o nível que ainda não vigora. */}
+          <div className="cartao mt-6 overflow-hidden">
+            <p className="cartao-titulo">Sequência de desempate em vigor</p>
+            <ol className="divide-y divide-linha">
+              {SEQUENCIA_DESEMPATE.map((rotulo, i) => (
+                <li key={rotulo} className="flex items-baseline gap-3 px-4 py-2.5">
+                  <span className="num flex size-6 shrink-0 items-center justify-center rounded bg-azul text-[12px] font-bold text-white">
+                    {i + 1}
+                  </span>
+                  <span className="text-[14.5px]">{rotulo}</span>
+                </li>
+              ))}
+              {NIVEIS_INATIVOS.map((nivel) => (
+                <li key={nivel.chave} className="flex items-baseline gap-3 bg-cinza px-4 py-2.5">
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded bg-linha-forte text-[11px] font-bold text-white">
+                    —
+                  </span>
+                  <span className="text-[14.5px] text-texto-2">
+                    {nivel.rotulo}
+                    <span className="mt-0.5 block text-[13px] text-texto-3">
+                      declarado e fora de vigor · {nivel.bloqueio}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <p className="border-t border-linha px-4 py-3 text-[13.5px] text-texto-2">
+              O instrumento normativo que institui a proximidade como desempate está a confirmar. Por isso o
+              vetor é parâmetro versionado, e não código: quando a confirmação vier, muda-se o arquivo e a
+              vigência, sem deploy.
+            </p>
+          </div>
         </div>
       </section>
     </>

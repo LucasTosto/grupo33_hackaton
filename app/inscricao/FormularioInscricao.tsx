@@ -484,9 +484,9 @@ export default function FormularioInscricao({
                 <p className="rotulo mb-1 text-atencao">Atenção à comprovação</p>
                 <p className="text-[14.5px] text-texto-2">
                   Em 2025, 68,2% das inscrições declararam ao menos um critério e apenas 6,2% chegaram à
-                  classificação com pontuação acima de zero. A diferença não é fraude: é família que não
-                  conseguiu comparecer para comprovar. Quem não comprova entra empatado em zero com 93,8% da
-                  fila.
+                  classificação com pontuação acima de zero. Quem entra sem pontuação fica empatado com 93,8%
+                  da fila, e a posição passa a ser decidida pelo sorteio. Leve os documentos da lista que
+                  aparece no fim deste formulário.
                 </p>
               </div>
             </Secao>
@@ -778,8 +778,8 @@ function Resultado({
         <section className="mb-7">
           <h2 className="secao-titulo mb-2">Documentos a apresentar</h2>
           <p className="mb-3 max-w-[66ch] text-[14.5px] text-texto-2">
-            Sem estes documentos, a pontuação declarada não entra na classificação. É aqui que a rede perdeu
-            62 pontos percentuais em 2025.
+            Sem estes documentos, a pontuação declarada não entra na classificação. É a etapa em que a maior
+            parte da pontuação declarada se perdeu em 2025.
           </p>
           <ul className="cartao divide-y divide-linha overflow-hidden">
             {comprovantes.map((doc) => (

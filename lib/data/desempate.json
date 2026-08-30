@@ -1,0 +1,58 @@
+{
+ "versao": "195.1",
+ "processoId": 195,
+ "ano": 2025,
+ "fonte": "Resolução SME nº 542 e edital do processo 195",
+ "instrumentoNormativo": {
+  "proximidade": "a confirmar",
+  "observacao": "O instrumento normativo que institui a proximidade como desempate está a confirmar. Por isso o vetor de desempate é parâmetro versionado, e não código: quando a confirmação vier, muda-se este arquivo e a vigência, sem deploy."
+ },
+ "vetor": [
+  {
+   "nivel": 1,
+   "chave": "pontuacao_resolucao",
+   "rotulo": "Pontuação da Resolução",
+   "sentido": "maior_primeiro",
+   "ativo": true,
+   "origem": "catalogo-2025.json",
+   "observacao": "Inteiro de 0 a 100, igual em todos os assentos. Em 2025 deixa 93,8% da fila empatada em zero."
+  },
+  {
+   "nivel": 2,
+   "chave": "criterios_resolucao",
+   "rotulo": "Critérios de desempate da Resolução",
+   "sentido": "maior_primeiro",
+   "ativo": true,
+   "pergIds": [29, 30],
+   "observacao": "Comparados na ordem deste array, que é a ordem de exibição no formulário: 29 = irmão matriculado na rede; 30 = responsável com menos de 18 anos."
+  },
+  {
+   "nivel": 3,
+   "chave": "proximidade",
+   "rotulo": "Proximidade entre residência e creche",
+   "sentido": "maior_primeiro",
+   "ativo": false,
+   "bloqueio": "instrumento normativo a confirmar",
+   "parametros": {
+    "formula": "d_min(crianca) / d(crianca, assento)",
+    "alfaTrabalho": 0.7,
+    "geografiaMinima": "centroide de bairro; logradouro em produção; microárea SME/IPP onde o endereçamento é irregular"
+   },
+   "observacao": "Nível especificado e não implementado. Ativá-lo torna a prioridade dependente do assento — ver §5.6 do TDD. O carregador falha alto se este nível for marcado como ativo, em vez de ignorá-lo em silêncio."
+  },
+  {
+   "nivel": 4,
+   "chave": "sorteio",
+   "rotulo": "Posição no sorteio",
+   "sentido": "menor_primeiro",
+   "ativo": true,
+   "parametros": {
+    "funcao": "HMAC-SHA256(semente_do_processo, id_da_crianca)",
+    "escopoDaSemente": "processo",
+    "publicacao": "Diário Oficial, antes da rodada"
+  },
+   "observacao": "Semente única para todo o processo, nunca uma por unidade: sorteio independente por unidade quebra a verificabilidade e não compensa em equidade."
+  }
+ ],
+ "niveisImplementados": ["pontuacao_resolucao", "criterios_resolucao", "sorteio"]
+}

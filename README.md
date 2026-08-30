@@ -48,8 +48,15 @@ Cruzando a Query B com a régua da Query C, no processo de 2025:
 - **6,2%** chegaram à classificação com pontuação acima de zero.
 - Logo, **93,8% da fila — 67.505 inscrições — entra empatada em zero ponto.**
 
-O campo `confirmado` da base não marca critério a critério: marca se a família compareceu para
-comprovar. Quem não vai perde tudo de uma vez.
+**O que não sabemos, e que precisa ser dito assim.** No campo que a extração expõe como comprovação,
+**62% de todas as inscrições declararam critério e aparecem com zero ponto**. Ou é perda real de
+pontuação, ou a validação automática não está sendo registrada de forma auditável. Não sabemos qual —
+é a primeira pergunta para a equipe de dados da SME, e a solução resolve os dois casos: se é perda
+real, o funil de comprovação automática recupera; se é registro, a rodada versionada passa a deixar
+rastro auditável de cada critério validado.
+
+O campo `confirmado` também é uniforme dentro da inscrição em 96,7% dos casos, o que é compatível com
+as duas leituras.
 
 Isso muda o que a solução precisa fazer. **A régua de pontuação da Resolução praticamente não
 classifica.** Quem ordena a fila, na prática, é o critério de desempate — e é por isso que o motor
@@ -85,6 +92,24 @@ p(criança) = ( pontuação_da_resolução ,
 As 13 perguntas de 2025 e seus pesos (Cadúnico vale 51 dos 100 pontos) são **dado versionado**, não
 código: [`lib/data/catalogo-2025.json`](lib/data/catalogo-2025.json), extraído da Query C. Quando a
 Resolução do ano seguinte é publicada, ninguém faz deploy.
+
+**A própria sequência de desempate também é dado**, em
+[`lib/data/desempate.json`](lib/data/desempate.json):
+
+```
+1  pontuação da Resolução          em vigor
+2  critérios da Resolução          em vigor   (29 irmão matriculado → 30 responsável < 18)
+—  proximidade                     declarada e fora de vigor
+3  posição no sorteio              em vigor
+```
+
+O instrumento normativo que institui a proximidade como desempate está a confirmar. Por isso o vetor
+é parâmetro versionado, e não código: quando a confirmação vier, muda-se o arquivo e a vigência, sem
+deploy. E nada fica travado esperando resposta — o nível existe, declarado, inativo e com o motivo do
+bloqueio registrado no próprio dado.
+
+O carregador é deliberadamente ruidoso: **marcar como ativo um nível que o motor não implementa
+falha**, em vez de produzir uma rodada silenciosamente errada. Há teste para isso.
 
 ### Desempate auditável
 
@@ -303,9 +328,14 @@ vez de só otimizar o algoritmo, o formulário passou a entregar a lista de docu
 
 Coisas que um número bonito não deve esconder:
 
-- **A capacidade usada no backtest é quantas crianças a rede matriculou em cada assento em 2025**,
-  não a capacidade autorizada. Para o número operacional real seria preciso subtrair renovações
-  automáticas e transferências internas do sistema de gestão acadêmica.
+- **O que o backtest chama de capacidade é quantas crianças a rede matriculou em cada assento em
+  2025.** Não é capacidade real nem capacidade autorizada: é uma **referência observada**, escolhida
+  porque torna a comparação justa (mesma fila, mesma capacidade — o motor não pode ganhar inventando
+  vaga). Para número operacional seria preciso o parâmetro de vagas da parametrização do processo,
+  menos renovações automáticas e transferências internas.
+- **No mapa de vacância a referência é outra e também é ajustável:** `turmas × lotação − alunos`, com
+  **lotação de referência (p90 observado = 25), ajustável** como campo de parametrização. Nunca como
+  capacidade real.
 - **O motor preenche 47.847 das 48.688 vagas** (98,3%). As 841 restantes sobraram porque toda criança
   que as escolheu foi atendida em opção melhor. Não alocamos mais gente que o histórico — se
   alocássemos, seria sinal de erro.
