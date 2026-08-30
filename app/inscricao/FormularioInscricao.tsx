@@ -30,6 +30,7 @@ interface PosicaoNaFila {
   aFrente: number;
   concorrentes: number;
   alocado: boolean;
+  faixa: { de: number; ate: number };
 }
 
 interface Resumo {
@@ -45,6 +46,7 @@ interface Resumo {
   totalCandidatos: number;
   remanejadas: number;
   propostasAvaliadas: number;
+  opcaoMantida: number;
   explicacao: string;
 }
 
@@ -69,12 +71,29 @@ interface Resposta {
   comprovantes: Comprovante[];
 }
 
+interface ListaDeEspera {
+  modo: string;
+  padrao: string;
+  justificativa: string;
+}
+
+interface PosicaoAoVivo {
+  exibir: boolean;
+  formato: string;
+  larguraFaixaPct: number;
+  exibirEmTodasAsOpcoes: boolean;
+  janelaEstabilizacaoDias: number;
+  textoDaMecanica: string;
+}
+
 interface Props {
   bairros: string[];
   criterios: Criterio[];
   pontuacaoMaxima: number;
   anoProcesso: number;
   maxOpcoes: number;
+  listaDeEspera: ListaDeEspera;
+  posicaoAoVivo: PosicaoAoVivo;
 }
 
 const CHAVE_LOCAL = "vaga-certa:inscricao";
@@ -107,6 +126,8 @@ export default function FormularioInscricao({
   pontuacaoMaxima,
   anoProcesso,
   maxOpcoes,
+  listaDeEspera,
+  posicaoAoVivo,
 }: Props) {
   const [passo, setPasso] = useState(0);
   const [nascimento, setNascimento] = useState("");
@@ -114,6 +135,7 @@ export default function FormularioInscricao({
   const [bairro, setBairro] = useState("");
   const [escolhidas, setEscolhidas] = useState<number[]>([]);
   const [marcados, setMarcados] = useState<number[]>([]);
+  const [opcaoMantida, setOpcaoMantida] = useState(1);
   const [busca, setBusca] = useState("");
 
   const [unidades, setUnidades] = useState<UnidadeEscolha[]>([]);
@@ -163,6 +185,10 @@ export default function FormularioInscricao({
     });
   }, [passo]);
 
+  useEffect(() => {
+    if (escolhidas.length > 0 && opcaoMantida > escolhidas.length) setOpcaoMantida(1);
+  }, [escolhidas.length, opcaoMantida]);
+
   const porCodigo = useMemo(() => new Map(unidades.map((u) => [u.codigo, u])), [unidades]);
 
   const filtradas = useMemo(() => {
@@ -195,7 +221,14 @@ export default function FormularioInscricao({
       const r = await fetch("/api/inscricao", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ nascimento, bairro, horario, opcoes: escolhidas, criterios: marcados }),
+        body: JSON.stringify({
+          nascimento,
+          bairro,
+          horario,
+          opcoes: escolhidas,
+          criterios: marcados,
+          opcaoMantida,
+        }),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -212,6 +245,7 @@ export default function FormularioInscricao({
             horario,
             opcoes: escolhidas,
             criterios: marcados,
+            opcaoMantida,
             protocolo: d.inscricao.protocolo,
           }),
         );
@@ -223,7 +257,7 @@ export default function FormularioInscricao({
     } finally {
       setEnviando(false);
     }
-  }, [nascimento, bairro, horario, escolhidas, marcados]);
+  }, [nascimento, bairro, horario, escolhidas, marcados, opcaoMantida]);
 
   const podeAvancar = [
     Boolean(grupamento) && Boolean(horario),
@@ -389,6 +423,14 @@ export default function FormularioInscricao({
                     )}
                   </div>
 
+                  <div className="tarja mb-5 border-l-ok">
+                    <p className="text-[14.5px] text-texto-2">
+                      <strong className="text-texto">{posicaoAoVivo.textoDaMecanica}</strong> Se a 1ª não
+                      der, a inscrição desce para a 2ª intacta — não há vantagem em rebaixar a creche que
+                      vocês realmente querem.
+                    </p>
+                  </div>
+
                   <label className="block max-w-md">
                     <span className="rotulo mb-1.5 block">Buscar por nome ou bairro</span>
                     <input
@@ -515,6 +557,36 @@ export default function FormularioInscricao({
                   </ol>
                 </Item>
               </dl>
+
+              {escolhidas.length > 1 && (
+                <div className="cartao mt-5 overflow-hidden">
+                  <p className="cartao-titulo">Lista de espera</p>
+                  <div className="p-4">
+                    <p className="mb-3 max-w-[66ch] text-[14.5px] text-texto-2">
+                      Se a criança for atendida numa opção que não é a que vocês mais querem, ela continua na
+                      lista de espera de <strong className="text-texto">uma</strong> das opções. Vocês
+                      escolhem qual — a matrícula é piso, não teto.
+                    </p>
+                    <label className="block max-w-lg">
+                      <span className="rotulo mb-1.5 block">Manter na lista de espera de</span>
+                      <select
+                        value={opcaoMantida}
+                        onChange={(e) => setOpcaoMantida(Number(e.target.value))}
+                        className="campo"
+                      >
+                        {escolhidas.map((c, i) => (
+                          <option key={c} value={i + 1}>
+                            {i + 1}ª opção — {porCodigo.get(c)?.nome ?? c}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <p className="mt-2.5 text-[13px] text-texto-3">
+                      Padrão: a 1ª opção. {listaDeEspera.justificativa}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {erros.length > 0 && (
                 <div className="tarja mt-5 border-l-erro bg-erro-fundo" role="alert">
@@ -749,8 +821,10 @@ function Resultado({
           <h2 className="secao-titulo mb-2">Fila de melhoria</h2>
           <p className="mb-3 max-w-[66ch] text-[14.5px] text-texto-2">
             {c
-              ? "As opções melhores continuam valendo. Se abrir vaga em alguma delas, o remanejamento é automático e a vaga atual entra em cascata para a próxima criança. A matrícula é piso, não teto."
-              : "Estas são as vagas em disputa. A posição é recalculada a cada vaga liberada na rede."}
+              ? `A ${resumo.opcaoMantida}ª opção continua valendo. Se abrir vaga nela, o remanejamento é automático e a vaga atual entra em cascata para a próxima criança. A matrícula é piso, não teto.`
+              : "Esta é a vaga em disputa. A posição é recalculada a cada vaga liberada na rede."}
+            {" "}A posição vai como faixa, e não como número cravado: ela se move enquanto outras famílias
+            ainda estão escolhendo.
           </p>
           <ul className="cartao divide-y divide-linha overflow-hidden">
             {resumo.filaDeMelhoria.map((p) => (
@@ -763,8 +837,8 @@ function Resultado({
                     {p.unidade?.nome ?? porCodigo.get(Number(p.assento.split("|")[0]))?.nome ?? p.assento}
                   </span>
                   <span className="num block text-[12.5px] text-texto-3">
-                    {plural(p.capacidade, "vaga", "vagas")} · {n(p.concorrentes)} disputando ·{" "}
-                    {n(p.aFrente)} com prioridade maior
+                    posição estimada entre {n(p.faixa.de)} e {n(p.faixa.ate)} ·{" "}
+                    {plural(p.capacidade, "vaga", "vagas")} · {n(p.concorrentes)} disputando
                   </span>
                 </span>
               </li>

@@ -7,6 +7,8 @@ import {
   COMPROVANTES,
   GRUPAMENTOS,
   HORARIOS,
+  MAX_OPCOES,
+  parametros,
   rodada,
   resumoDaInscricao,
   unidadePorCodigo,
@@ -20,7 +22,6 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const ANO_PROCESSO = 2025;
-const MAX_OPCOES = 5;
 
 interface Corpo {
   /** `yyyy-MM` — a base só expõe ano-mês, e o motor só precisa disso. */
@@ -29,6 +30,11 @@ interface Corpo {
   horario?: string;
   opcoes?: number[];
   criterios?: number[];
+  /**
+   * Qual opção a família quer manter na lista de espera, se for alocada fora
+   * dela. 1 = primeira. Padrão: a 1ª opção.
+   */
+  opcaoMantida?: number;
   /** Reenviado ao acompanhar uma inscrição já feita, para manter o protocolo. */
   protocolo?: string;
 }
@@ -111,6 +117,12 @@ export async function POST(req: Request) {
     }
   }
 
+  // A família escolhe qual opção fica na lista de espera; padrão é a 1ª.
+  const opcaoMantida = Number.isFinite(corpo.opcaoMantida) ? Number(corpo.opcaoMantida) : 1;
+  if (opcoes.length > 0 && (opcaoMantida < 1 || opcaoMantida > opcoes.length)) {
+    erros.push(`A opção mantida na lista de espera precisa estar entre 1 e ${opcoes.length}.`);
+  }
+
   const validos = new Set(catalogo.criterios.map((c) => c.pergId));
   const criterios = (Array.isArray(corpo.criterios) ? corpo.criterios.map(Number) : []).filter((p) => validos.has(p));
 
@@ -125,12 +137,13 @@ export async function POST(req: Request) {
     opcoes,
     criterios,
     bairro: corpo.bairro ?? null,
+    opcaoMantida,
   };
 
   const resumo = resumoDaInscricao(inscricao);
 
   // O que a família precisa levar para comprovar. Sem isso, a pontuação declarada
-  // não vira pontuação na classificação: é onde 62 pontos percentuais se perdem.
+  // não entra na classificação — a etapa em que a maior parte dela se perdeu em 2025.
   const comprovantes = catalogo.criterios
     .filter((c) => criterios.includes(c.pergId))
     .sort((a, b) => b.pontos - a.pontos)
@@ -146,5 +159,11 @@ export async function POST(req: Request) {
     inscricao: { ...inscricao, grupamento },
     resumo,
     comprovantes,
+    parametros: {
+      maxOpcoes: MAX_OPCOES,
+      listaDeEspera: parametros.listaDeEspera,
+      rodada: parametros.rodada,
+      posicaoAoVivo: parametros.posicaoAoVivo,
+    },
   });
 }

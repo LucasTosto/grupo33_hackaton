@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { catalogo, listaDeBairros } from "@/lib/dados";
+import { catalogo, listaDeBairros, MAX_OPCOES, parametros } from "@/lib/dados";
 
 import FormularioInscricao from "./FormularioInscricao";
 
@@ -17,7 +17,9 @@ export default function Pagina() {
       criterios={[...catalogo.criterios].sort((a, b) => a.ordem - b.ordem)}
       pontuacaoMaxima={catalogo.pontuacaoMaxima}
       anoProcesso={catalogo.ano}
-      maxOpcoes={5}
+      maxOpcoes={MAX_OPCOES}
+      listaDeEspera={parametros.listaDeEspera}
+      posicaoAoVivo={parametros.posicaoAoVivo}
     />
   );
 }

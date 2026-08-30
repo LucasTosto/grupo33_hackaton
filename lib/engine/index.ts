@@ -34,6 +34,17 @@ export interface Preferencia {
   /** 1 = primeira opção. */
   ordem: number;
   assento: AssentoId;
+  /**
+   * Proximidade da criança a **este** assento, em [0,1], onde 1 é a creche mais
+   * próxima dela. Só é usada quando o nível de proximidade está em vigor no
+   * vetor de desempate.
+   *
+   * Vive na preferência, e não numa matriz criança × assento, porque a criança
+   * só disputa os assentos que listou: são ~160 mil pares no processo de 2025,
+   * não os 133 milhões da matriz completa. É o que torna o desempate territorial
+   * viável sem materializar nada.
+   */
+  proximidade?: number;
 }
 
 export interface Candidato {
@@ -77,6 +88,13 @@ export interface ParametrosRodada {
   catalogoVersao: string;
   /** `pergId` dos critérios de desempate, na ordem de precedência da Resolução. */
   ordemDesempate: number[];
+  /**
+   * Liga o nível de proximidade do vetor de desempate, entre os critérios da
+   * Resolução e o sorteio. Vem do arquivo versionado, não de código.
+   *
+   * Com ele ligado a prioridade passa a depender do assento — ver §5.6 do TDD.
+   */
+  usarProximidade?: boolean;
   /** Fixa o instante gravado na rodada — usado nos testes e no backtest. */
   agora?: string;
 }
@@ -101,12 +119,16 @@ interface CandidatoPreparado extends Candidato {
   sorteio: string;
   proximaOpcao: number;
   ordenadas: Preferencia[];
+  /** Proximidade por assento listado. Vazio quando o nível não está em vigor. */
+  prox: Map<AssentoId, number>;
+  usarProximidade: boolean;
 }
 
 function prepara(
   candidatos: Candidato[],
   semente: string,
   ordemDesempate: number[],
+  usarProximidade = false,
 ): Map<string, CandidatoPreparado> {
   const mapa = new Map<string, CandidatoPreparado>();
   for (const c of candidatos) {
@@ -114,22 +136,48 @@ function prepara(
       throw new Error(`candidato duplicado na entrada: ${c.id}`);
     }
     const atende = new Set(c.desempates);
+    const prox = new Map<AssentoId, number>();
+    if (usarProximidade) {
+      for (const p of c.preferencias) {
+        if (typeof p.proximidade === "number") prox.set(p.assento, p.proximidade);
+      }
+    }
     mapa.set(c.id, {
       ...c,
       chave: [c.pontos, ...ordemDesempate.map((p) => (atende.has(p) ? 1 : 0))],
       sorteio: posicaoNoSorteio(semente, c.id),
       proximaOpcao: 0,
       ordenadas: [...c.preferencias].sort((a, b) => a.ordem - b.ordem),
+      prox,
+      usarProximidade,
     });
   }
   return mapa;
 }
 
-/** > 0 quando `a` tem prioridade sobre `b`. Total: nunca devolve 0 para ids distintos. */
-export function comparaPrioridade(a: CandidatoPreparado, b: CandidatoPreparado): number {
+/**
+ * > 0 quando `a` tem prioridade sobre `b`. Total: nunca devolve 0 para ids distintos.
+ *
+ * `assento` é obrigatório para que a proximidade participe. Sem ele — ou com o
+ * nível fora de vigor — a comparação é exatamente a de antes, o que mantém a
+ * compatibilidade com as rodadas já publicadas.
+ */
+export function comparaPrioridade(
+  a: CandidatoPreparado,
+  b: CandidatoPreparado,
+  assento?: AssentoId,
+): number {
   for (let i = 0; i < a.chave.length; i++) {
     if (a.chave[i] !== b.chave[i]) return a.chave[i] - b.chave[i];
   }
+
+  // Nível de proximidade, entre os critérios da Resolução e o sorteio.
+  if (a.usarProximidade && assento !== undefined) {
+    const pa = a.prox.get(assento) ?? 0;
+    const pb = b.prox.get(assento) ?? 0;
+    if (pa !== pb) return pa > pb ? 1 : -1;
+  }
+
   // Empate na régua da Resolução: decide o sorteio publicado. Menor hash primeiro.
   if (a.sorteio !== b.sorteio) return a.sorteio < b.sorteio ? 1 : -1;
   return a.id < b.id ? 1 : -1;
@@ -156,7 +204,7 @@ export function alocar(p: ParametrosRodada): ResultadoRodada {
     porAssento.set(a.id, a);
   }
 
-  const cands = prepara(candidatos, semente, ordemDesempate);
+  const cands = prepara(candidatos, semente, ordemDesempate, p.usarProximidade ?? false);
   /** Ocupantes correntes de cada assento. Provisórios até a rodada terminar. */
   const ocupantes = new Map<AssentoId, CandidatoPreparado[]>();
   const opcaoAtendida = new Map<string, number>();
@@ -198,11 +246,11 @@ export function alocar(p: ParametrosRodada): ResultadoRodada {
     // Assento cheio: disputa com o ocupante de menor prioridade.
     let piorIdx = 0;
     for (let i = 1; i < lista.length; i++) {
-      if (comparaPrioridade(lista[i], lista[piorIdx]) < 0) piorIdx = i;
+      if (comparaPrioridade(lista[i], lista[piorIdx], assento.id) < 0) piorIdx = i;
     }
     const pior = lista[piorIdx];
 
-    if (comparaPrioridade(c, pior) > 0) {
+    if (comparaPrioridade(c, pior, assento.id) > 0) {
       lista[piorIdx] = c;
       opcaoAtendida.set(c.id, ordem);
       opcaoAtendida.delete(pior.id);
@@ -249,7 +297,10 @@ export function alocar(p: ParametrosRodada): ResultadoRodada {
  */
 export function hashDeEntrada(p: ParametrosRodada): string {
   const h = createHmac("sha256", "rodada-v1");
-  h.update(p.semente + " " + p.catalogoVersao + " " + p.ordemDesempate.join(","));
+  // `usarProximidade` muda o resultado, então faz parte da identidade da rodada.
+  h.update(
+    [p.semente, p.catalogoVersao, p.ordemDesempate.join(","), `prox=${p.usarProximidade ? 1 : 0}`].join(" "),
+  );
   for (const a of [...p.assentos].sort((x, y) => (x.id < y.id ? -1 : 1))) {
     h.update(`${a.id}:${a.capacidade}`);
   }
@@ -281,7 +332,7 @@ export interface Violacao {
  */
 export function verificarEstabilidade(p: ParametrosRodada, r: ResultadoRodada): Violacao[] {
   const violacoes: Violacao[] = [];
-  const cands = prepara(p.candidatos, p.semente, p.ordemDesempate);
+  const cands = prepara(p.candidatos, p.semente, p.ordemDesempate, p.usarProximidade ?? false);
   const capacidade = new Map(p.assentos.map((a) => [a.id, a.capacidade]));
 
   const assentoDe = new Map<string, AssentoId>();
@@ -328,7 +379,7 @@ export function verificarEstabilidade(p: ParametrosRodada, r: ResultadoRodada): 
       }
       for (const outroId of lista) {
         const outro = cands.get(outroId);
-        if (outro && comparaPrioridade(c, outro) > 0) {
+        if (outro && comparaPrioridade(c, outro, pref.assento) > 0) {
           violacoes.push({
             tipo: "par_bloqueador",
             detalhe: `${c.id} preferia ${pref.assento}, ocupado por ${outroId}, de prioridade menor`,
@@ -388,7 +439,7 @@ export function cascataDeVaga(
   limite = 50,
 ): Cascata {
   const t0 = performance.now();
-  const cands = prepara(p.candidatos, p.semente, p.ordemDesempate);
+  const cands = prepara(p.candidatos, p.semente, p.ordemDesempate, p.usarProximidade ?? false);
 
   // Índice assento → quem o escolheu, e em que posição da preferência.
   const interessados = new Map<AssentoId, { id: string; ordem: number }[]>();
@@ -428,7 +479,7 @@ export function cascataDeVaga(
       const tem = atual.get(id);
       // Já está nesta vaga, ou já foi atendido em opção igual ou melhor.
       if (tem && tem.ordem <= ordem) continue;
-      if (melhor === null || comparaPrioridade(c, melhor) > 0) {
+      if (melhor === null || comparaPrioridade(c, melhor, vaga) > 0) {
         melhor = c;
         melhorOrdem = ordem;
       }
@@ -511,7 +562,7 @@ export function inserirCandidato(
   novoId: string,
 ): Insercao {
   const t0 = performance.now();
-  const cands = prepara(p.candidatos, p.semente, p.ordemDesempate);
+  const cands = prepara(p.candidatos, p.semente, p.ordemDesempate, p.usarProximidade ?? false);
   const novo = cands.get(novoId);
   if (!novo) throw new Error(`candidato ${novoId} não está na entrada da rodada`);
 
@@ -561,11 +612,11 @@ export function inserirCandidato(
       for (let i = 1; i < lista.length; i++) {
         const a = cands.get(lista[i]);
         const b = cands.get(lista[piorIdx]);
-        if (a && b && comparaPrioridade(a, b) < 0) piorIdx = i;
+        if (a && b && comparaPrioridade(a, b, pref.assento) < 0) piorIdx = i;
       }
       const piorId = lista[piorIdx];
       const pior = cands.get(piorId);
-      if (!pior || comparaPrioridade(c, pior) <= 0) continue; // não passa: tenta a próxima
+      if (!pior || comparaPrioridade(c, pior, pref.assento) <= 0) continue; // não passa: tenta a próxima
 
       const ordemDoPior = ordemDe.get(piorId) as number;
       lista[piorIdx] = id;

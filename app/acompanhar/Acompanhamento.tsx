@@ -12,6 +12,7 @@ interface PosicaoNaFila {
   capacidade: number;
   aFrente: number;
   concorrentes: number;
+  faixa: { de: number; ate: number };
 }
 
 interface Resumo {
@@ -26,6 +27,7 @@ interface Resumo {
   totalCandidatos: number;
   remanejadas: number;
   propostasAvaliadas: number;
+  opcaoMantida: number;
   explicacao: string;
 }
 
@@ -214,8 +216,8 @@ export default function Acompanhamento() {
                     <span className="min-w-0 flex-1">
                       <span className="block text-[15px] font-bold">{p.unidade?.nome ?? p.assento}</span>
                       <span className="num block text-[12.5px] text-texto-3">
-                        {p.capacidade} vagas · {n(p.concorrentes)} disputando · {n(p.aFrente)} com prioridade
-                        maior
+                        posição estimada entre {n(p.faixa.de)} e {n(p.faixa.ate)} · {p.capacidade} vagas ·{' '}
+                        {n(p.concorrentes)} disputando
                       </span>
                     </span>
                   </li>

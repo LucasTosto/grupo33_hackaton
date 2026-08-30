@@ -1,0 +1,38 @@
+{
+ "versao": "195.1",
+ "processoId": 195,
+ "ano": 2025,
+ "fonte": "Edital do processo 195 e parametrização SME",
+ "escolha": {
+  "maxOpcoes": 3,
+  "justificativa": "94,2% das crianças que conseguiram vaga entre 2021 e 2025 conseguiram numa das três primeiras opções. A 4ª e a 5ª responderam por 5,8% — cerca de 2.240 crianças por ano, que passam a ser atendidas pelo mapa de vacância.",
+  "anterior": 5
+ },
+ "listaDeEspera": {
+  "modo": "uma_opcao_escolhida",
+  "padrao": "primeira",
+  "justificativa": "Guardar uma opção só mantém a regra em uma frase de edital e as cascatas curtas. Deixar a família escolher qual manter — em vez de o sistema fixar a 1ª — evita o incentivo de rebaixar a creche desejada quando a posição ao vivo assusta."
+ },
+ "rodada": {
+  "diaDaSemana": 5,
+  "diaDaSemanaRotulo": "sexta-feira",
+  "janelaManifestacaoDias": 6,
+  "prazoRotulo": "quinta-feira seguinte",
+  "justificativa": "A recorrência responde ao contato desatualizado: em vez de três tentativas de telefone e o descarte, a criança volta a ser considerada semana após semana. O modelo deixa de ser push e passa a ser pull."
+ },
+ "vacancia": {
+  "lotacaoDeReferencia": 25,
+  "lotacaoAjustavel": true,
+  "rotulo": "lotação de referência (p90 observado = 25), ajustável",
+  "formula": "turmas × lotacaoDeReferencia − alunos",
+  "advertencia": "Não é capacidade real nem autorizada. É referência observada e editável; em produção o teto vem do parâmetro de vagas da parametrização do processo."
+ },
+ "posicaoAoVivo": {
+  "exibir": true,
+  "formato": "faixa",
+  "larguraFaixaPct": 25,
+  "exibirEmTodasAsOpcoes": true,
+  "janelaEstabilizacaoDias": 3,
+  "textoDaMecanica": "Colocar uma creche disputada em 1º lugar não reduz suas chances nas demais."
+ }
+}

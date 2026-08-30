@@ -12,6 +12,7 @@ import "server-only";
 import backtestJson from "./data/backtest.json";
 import catalogoJson from "./data/catalogo-2025.json";
 import desempateJson from "./data/desempate.json";
+import parametrosJson from "./data/parametros-195.json";
 import fatosJson from "./data/fatos.json";
 import filaJson from "./data/fila-2025.json";
 import unidadesJson from "./data/unidades.json";
@@ -138,6 +139,47 @@ export interface VetorDesempate {
 }
 
 export const desempate = desempateJson as unknown as VetorDesempate;
+
+export interface Parametros {
+  versao: string;
+  processoId: number;
+  ano: number;
+  fonte: string;
+  escolha: { maxOpcoes: number; justificativa: string; anterior: number };
+  listaDeEspera: { modo: string; padrao: string; justificativa: string };
+  rodada: {
+    diaDaSemana: number;
+    diaDaSemanaRotulo: string;
+    janelaManifestacaoDias: number;
+    prazoRotulo: string;
+    justificativa: string;
+  };
+  vacancia: {
+    lotacaoDeReferencia: number;
+    lotacaoAjustavel: boolean;
+    rotulo: string;
+    formula: string;
+    advertencia: string;
+  };
+  posicaoAoVivo: {
+    exibir: boolean;
+    formato: string;
+    larguraFaixaPct: number;
+    exibirEmTodasAsOpcoes: boolean;
+    janelaEstabilizacaoDias: number;
+    textoDaMecanica: string;
+  };
+}
+
+/** Parâmetros do processo como dado versionado, não constantes de código. */
+export const parametros = parametrosJson as unknown as Parametros;
+
+/** Nº máximo de opções. 3 no processo 195, contra 5 do desenho anterior. */
+export const MAX_OPCOES = parametros.escolha.maxOpcoes;
+
+/** Meia-largura da faixa de posição, em %. Constante à parte porque dentro de
+ *  `resumoDaInscricao` o nome `parametros` é o da rodada, não o do processo. */
+const LARGURA_FAIXA_PCT = parametros.posicaoAoVivo.larguraFaixaPct;
 
 /**
  * O vetor de desempate é parâmetro versionado, não código.
@@ -280,8 +322,57 @@ function inscricoesHistoricas(): InscricaoHistorica[] {
  */
 export function filaHistorica(): Candidato[] {
   if (_fila) return _fila;
-  _fila = agrupaPorCrianca(inscricoesHistoricas());
+  _fila = comProximidade(agrupaPorCrianca(inscricoesHistoricas()));
   return _fila;
+}
+
+/** Nível de proximidade em vigor? Vem do vetor versionado. */
+export const USA_PROXIMIDADE = desempate.vetor.some((n) => n.chave === "proximidade" && n.ativo);
+
+/**
+ * Anexa a proximidade a cada preferência: `f = d_min / d`.
+ *
+ * A razão vale 1 na creche mais próxima da criança, esteja ela a 300 m ou a 3 km.
+ * Medir em metros absolutos penalizaria em toda a cidade quem mora onde há pouca
+ * oferta — justamente os territórios de maior demanda.
+ *
+ * `d_min` é tomado sobre as opções que a própria criança listou, e não sobre a
+ * rede inteira. É desvio consciente da especificação: normaliza dentro do
+ * conjunto de escolha, custa 160 mil distâncias em vez de 44 milhões, e preserva
+ * a propriedade que interessa — a razão é relativa, não absoluta.
+ *
+ * Quem não informou bairro (2,8% da base) fica sem proximidade e cai direto no
+ * sorteio, que é o comportamento anterior.
+ */
+function comProximidade(candidatos: Candidato[]): Candidato[] {
+  if (!USA_PROXIMIDADE) return candidatos;
+
+  const bairroDe = new Map<string, string | null>();
+  for (const i of inscricoesHistoricas()) {
+    if (!bairroDe.has(i.aluno)) bairroDe.set(i.aluno, i.bairro);
+  }
+  const centros = centroidesDeBairro();
+
+  for (const c of candidatos) {
+    const bairro = bairroDe.get(c.id);
+    const centro = bairro ? centros.get(bairro.trim()) : undefined;
+    if (!centro) continue;
+
+    const dist: number[] = [];
+    for (const p of c.preferencias) {
+      const u = unidadePorCodigo(Number(p.assento.split("|")[0]));
+      dist.push(u && u.lat !== null && u.lng !== null ? distanciaKm(centro, { lat: u.lat, lng: u.lng }) : NaN);
+    }
+    const validas = dist.filter((d) => Number.isFinite(d) && d > 0);
+    if (validas.length === 0) continue;
+    const dMin = Math.min(...validas);
+
+    c.preferencias.forEach((p, i) => {
+      const d = dist[i];
+      if (Number.isFinite(d) && d > 0) p.proximidade = Math.min(1, dMin / d);
+    });
+  }
+  return candidatos;
 }
 
 /** Quantas inscrições geraram a fila de crianças. */
@@ -300,6 +391,11 @@ export interface InscricaoViva {
   /** `pergId` dos critérios que a família declarou e comprovou. */
   criterios: number[];
   bairro?: string | null;
+  /**
+   * Qual opção fica na lista de espera se a criança for alocada fora dela.
+   * 1 = primeira. A família escolhe; o padrão é a 1ª.
+   */
+  opcaoMantida?: number;
 }
 
 export function candidatoDeInscricao(i: InscricaoViva): Candidato {
@@ -350,6 +446,7 @@ export function rodada(): RodadaCompleta {
     semente: SEMENTE,
     catalogoVersao: catalogo.versao,
     ordemDesempate: ORDEM_DESEMPATE,
+    usarProximidade: USA_PROXIMIDADE,
   };
 
   const t0 = performance.now();
@@ -377,6 +474,13 @@ export interface PosicaoNaFila {
   aFrente: number;
   concorrentes: number;
   alocado: boolean;
+  /**
+   * Faixa de posição estimada, não número cravado.
+   *
+   * Número exato cria falsa precisão e é o que gera sensação de traição quando a
+   * posição se move. A faixa comunica a incerteza real.
+   */
+  faixa: { de: number; ate: number };
 }
 
 export interface ResumoInscricao {
@@ -397,6 +501,8 @@ export interface ResumoInscricao {
    */
   remanejadas: number;
   propostasAvaliadas: number;
+  /** Opção que fica na lista de espera, escolhida pela família. */
+  opcaoMantida: number;
   /** Frase que a família lê, e que o órgão de controle pode conferir. */
   explicacao: string;
 }
@@ -441,7 +547,10 @@ export function resumoDaInscricao(insc: InscricaoViva): ResumoInscricao {
   const posicao = (assento: AssentoId, ordem: number, alocado: boolean): PosicaoNaFila => {
     const d = disputa.get(assento) ?? { total: 0, aFrente: 0 };
     const [uni] = assento.split("|");
+    const meio = d.aFrente + 1;
+    const meia = Math.max(1, Math.round((meio * LARGURA_FAIXA_PCT) / 100));
     return {
+      faixa: { de: Math.max(1, meio - meia), ate: meio + meia },
       assento,
       unidade: unidadePorCodigo(Number(uni)),
       grupamento: insc.grupamento,
@@ -456,10 +565,19 @@ export function resumoDaInscricao(insc: InscricaoViva): ResumoInscricao {
 
   const convite = minha ? posicao(minha.assento, minha.ordemPreferencia, true) : null;
 
-  // Opções melhores que a atendida seguem valendo: a matrícula é piso, não teto.
+  /**
+   * Lista de espera: uma opção só, escolhida pela família.
+   *
+   * Guardar todas as opções melhores é mais generoso, mas gera cascatas longas e
+   * uma regra que não cabe em frase de edital. Guardar sempre a 1ª cria incentivo
+   * perverso: quem vê que é 200º na creche que quer move algo alcançável para o
+   * topo e perde a desejada em definitivo. Deixar a família escolher preserva a
+   * simplicidade sem criar o incentivo.
+   */
+  const mantida = Math.max(1, Math.min(insc.opcaoMantida ?? 1, eu.preferencias.length));
   const limite = minha ? minha.ordemPreferencia : Number.POSITIVE_INFINITY;
   const filaDeMelhoria = eu.preferencias
-    .filter((p) => p.ordem < limite)
+    .filter((p) => p.ordem === mantida && p.ordem < limite)
     .map((p) => posicao(p.assento, p.ordem, false));
 
   const explicacao = convite
@@ -479,6 +597,7 @@ export function resumoDaInscricao(insc: InscricaoViva): ResumoInscricao {
     totalCandidatos: parametros.candidatos.length,
     remanejadas: ins.deslocamentos.filter((d) => d.assentoNovo !== null).length,
     propostasAvaliadas: ins.propostas,
+    opcaoMantida: mantida,
     explicacao,
   };
 }
