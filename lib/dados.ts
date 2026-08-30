@@ -51,6 +51,12 @@ export interface AssentoUnidade {
   matriculados2025: number;
   /** Assentos que ficaram reservados em algum momento, inclusive os congelados. */
   assentosReservados2025: number;
+  /** Turmas registradas no consolidado de 2025. */
+  turmas2025?: number;
+  /** Alunos no consolidado de 2025. */
+  alunos2025?: number;
+  /** `turmas × lotação de referência − alunos`. Referência observada, ajustável. */
+  vagaEstimada?: number;
 }
 
 export interface Unidade {
@@ -735,6 +741,147 @@ export function assentosParaSimular(quantos = 8): {
   }
   lista.sort((x, y) => y.procura / y.vagas - x.procura / x.vagas);
   return lista.slice(0, quantos);
+}
+
+// ──────────────────────────────────────────────────────── mapa de vacância
+
+export interface AssentoVacante {
+  assento: AssentoId;
+  unidade: string;
+  bairro: string | null;
+  cre: number | null;
+  grupamento: string;
+  horario: string;
+  turmas: number;
+  alunos: number;
+  /** `turmas × lotação de referência − alunos`. Referência observada, ajustável. */
+  vaga: number;
+  /** Crianças que listaram este assento e ainda o preferem ao que têm. */
+  aguardando: number;
+}
+
+export interface Vacancia {
+  lotacaoDeReferencia: number;
+  rotuloLotacao: string;
+  formula: string;
+  advertencia: string;
+  semFila: { assentos: number; vagas: number; lista: AssentoVacante[] };
+  comFila: { assentos: number; vagas: number; aguardando: number; lista: AssentoVacante[] };
+  porBairro: { bairro: string; vagas: number; assentos: number }[];
+}
+
+let _vacancia: Vacancia | null = null;
+
+/**
+ * Onde ainda cabe alguém hoje — e sob que regime a vaga pode ser ocupada.
+ *
+ * A regra que impede o furo de fila está nos próprios dados: a maior parte das
+ * vagas disponíveis não tem ninguém na lista de espera. Vaga sem fila pode ser
+ * autoatendimento porque não há fila para furar e a pontuação é irrelevante.
+ * Vaga com fila nunca é self-service: o celular mais rápido passaria à frente da
+ * maior vulnerabilidade.
+ *
+ * "Aguardando" usa a mesma semântica da fila de melhoria: a criança listou o
+ * assento e ainda o prefere ao que recebeu — ou não recebeu nada.
+ */
+export function vacancia(): Vacancia {
+  if (_vacancia) return _vacancia;
+
+  const base = rodada();
+  const ordemDe = new Map<string, number>();
+  for (const a of base.resultado.alocacoes) ordemDe.set(a.candidato, a.ordemPreferencia);
+
+  const aguardando = new Map<AssentoId, number>();
+  for (const c of base.parametros.candidatos) {
+    const minha = ordemDe.get(c.id) ?? Number.POSITIVE_INFINITY;
+    for (const p of c.preferencias) {
+      if (p.ordem >= minha) continue; // já atendida em opção igual ou melhor
+      aguardando.set(p.assento, (aguardando.get(p.assento) ?? 0) + 1);
+    }
+  }
+
+  const semFila: AssentoVacante[] = [];
+  const comFila: AssentoVacante[] = [];
+  const porBairro = new Map<string, { vagas: number; assentos: number }>();
+
+  for (const u of unidades) {
+    for (const a of u.assentos) {
+      const vaga = a.vagaEstimada ?? 0;
+      if (vaga <= 0) continue;
+      const id = assentoId(u.codigo, a.grupamento, a.horario);
+      const fila = aguardando.get(id) ?? 0;
+      const item: AssentoVacante = {
+        assento: id,
+        unidade: u.nome,
+        bairro: u.bairro,
+        cre: u.cre,
+        grupamento: a.grupamento,
+        horario: a.horario,
+        turmas: a.turmas2025 ?? 0,
+        alunos: a.alunos2025 ?? 0,
+        vaga,
+        aguardando: fila,
+      };
+      (fila === 0 ? semFila : comFila).push(item);
+
+      if (fila === 0 && u.bairro) {
+        const b = porBairro.get(u.bairro) ?? { vagas: 0, assentos: 0 };
+        b.vagas += vaga;
+        b.assentos += 1;
+        porBairro.set(u.bairro, b);
+      }
+    }
+  }
+
+  semFila.sort((a, b) => b.vaga - a.vaga);
+  comFila.sort((a, b) => b.aguardando - a.aguardando);
+
+  _vacancia = {
+    lotacaoDeReferencia: parametros.vacancia.lotacaoDeReferencia,
+    rotuloLotacao: parametros.vacancia.rotulo,
+    formula: parametros.vacancia.formula,
+    advertencia: parametros.vacancia.advertencia,
+    semFila: {
+      assentos: semFila.length,
+      vagas: semFila.reduce((s, x) => s + x.vaga, 0),
+      lista: semFila.slice(0, 40),
+    },
+    comFila: {
+      assentos: comFila.length,
+      vagas: comFila.reduce((s, x) => s + x.vaga, 0),
+      aguardando: comFila.reduce((s, x) => s + x.aguardando, 0),
+      lista: comFila.slice(0, 20),
+    },
+    porBairro: [...porBairro.entries()]
+      .map(([bairro, v]) => ({ bairro, ...v }))
+      .sort((a, b) => b.vagas - a.vagas)
+      .slice(0, 12),
+  };
+  return _vacancia;
+}
+
+/** Próxima rodada e prazo de manifestação, a partir do calendário parametrizado. */
+export function proximaRodada(agora = new Date()): {
+  rodada: string;
+  prazo: string;
+  diaRotulo: string;
+  prazoRotulo: string;
+  janelaDias: number;
+} {
+  const alvo = parametros.rodada.diaDaSemana; // 5 = sexta
+  const d = new Date(agora);
+  const delta = (alvo - d.getDay() + 7) % 7 || 7;
+  d.setDate(d.getDate() + delta);
+  const prazo = new Date(d);
+  prazo.setDate(prazo.getDate() + parametros.rodada.janelaManifestacaoDias);
+  const fmt = (x: Date) => x.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  return {
+    rodada: fmt(d),
+    prazo: fmt(prazo),
+    diaRotulo: parametros.rodada.diaDaSemanaRotulo,
+    prazoRotulo: parametros.rodada.prazoRotulo,
+    janelaDias: parametros.rodada.janelaManifestacaoDias,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────── geografia

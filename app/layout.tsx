@@ -13,6 +13,7 @@ const NAV = [
   { href: "/", rotulo: "Início" },
   { href: "/inscricao", rotulo: "Inscrição" },
   { href: "/acompanhar", rotulo: "Consulta inscrição" },
+  { href: "/vagas", rotulo: "Onde há vaga" },
   { href: "/painel", rotulo: "Painel da rede" },
 ];
 
