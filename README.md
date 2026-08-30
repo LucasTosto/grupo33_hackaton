@@ -2,11 +2,12 @@
 
 **Claude Impact Lab Rio · Eixos 2 e 3 · 30/08/2026**
 
-- **Equipe:** Seed 33
+- **Equipe:** Vaga Certa
 - **Grupo nº:** 33
 - **Membros:** Camila Nascimento, João Assumpção, Pedro Moradillo, Lucas Tosto
-- **Aplicação:** **https://grupo33-hackathon.vercel.app**
+- **Aplicação:** **https://grupo33-hackathon.vercel.app/**
 - **Vídeo demo (60s):** `PREENCHER`
+- **Documento de design técnico:** [`docs/TDD.md`](docs/TDD.md)
 
 ---
 
