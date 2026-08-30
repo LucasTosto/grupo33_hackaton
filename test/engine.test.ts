@@ -13,6 +13,7 @@ import { describe, it } from "node:test";
 import {
   alocar,
   assentoId,
+  cascataDeVaga,
   comparaPrioridade,
   decodificaAssento,
   grupamentoPorNascimento,
@@ -237,6 +238,138 @@ describe("assento e grupamento", () => {
     assert.equal(grupamentoPorNascimento("2024-01", 2025), "Maternal I");
     assert.equal(grupamentoPorNascimento("2023-01", 2025), "Maternal II");
     assert.equal(grupamentoPorNascimento("2021-01", 2025), null, "3 anos ou mais sai de creche");
+  });
+});
+
+describe("rodada contínua (cascata)", () => {
+  it("a vaga liberada vai para quem tem maior prioridade entre os que a querem", () => {
+    const assentos = [assento(1, 1), assento(2, 1)];
+    // 'forte' está na 2ª opção; 'fraco' ocupa a 1ª opção dele.
+    const cands = [candidato("forte", 50, [1, 2]), candidato("fraco", 0, [1])];
+    const entrada = params(cands, assentos);
+
+    // Estado de partida montado à mão: o assento 1 está com 'fraco'.
+    const alocacoes = [
+      { candidato: "fraco", assento: assentos[0].id, ordemPreferencia: 1 },
+      { candidato: "forte", assento: assentos[1].id, ordemPreferencia: 2 },
+    ];
+
+    const c = cascataDeVaga(entrada, alocacoes, assentos[0].id);
+    assert.equal(c.movimentos.length, 1);
+    assert.equal(c.movimentos[0].candidato, "forte", "quem tem prioridade sobe");
+    assert.equal(c.movimentos[0].ordemRecebida, 1);
+    assert.equal(c.movimentos[0].assentoLiberado, assentos[1].id, "e larga o assento que tinha");
+  });
+
+  it("encadeia: cada criança que sobe libera o assento da próxima", () => {
+    const assentos = [assento(1, 1), assento(2, 1), assento(3, 1)];
+    const cands = [
+      candidato("a", 50, [1, 2]), // quer 1, está em 2
+      candidato("b", 20, [2, 3]), // quer 2, está em 3
+      candidato("c", 0, [1]),
+    ];
+    const entrada = params(cands, assentos);
+    const alocacoes = [
+      { candidato: "a", assento: assentos[1].id, ordemPreferencia: 2 },
+      { candidato: "b", assento: assentos[2].id, ordemPreferencia: 2 },
+    ];
+
+    const c = cascataDeVaga(entrada, alocacoes, assentos[0].id);
+    assert.deepEqual(
+      c.movimentos.map((m) => m.candidato),
+      ["a", "b"],
+      "a sobe para o assento 1, libera o 2, e b sobe para o 2",
+    );
+    assert.equal(c.movimentos[1].assentoRecebido, assentos[1].id);
+    assert.equal(c.assentoOcioso, assentos[2].id, "a cadeia termina no assento que ninguém quis");
+  });
+
+  it("termina sem mover ninguém quando a vaga não interessa a quem espera", () => {
+    const assentos = [assento(1, 1), assento(9, 1)];
+    const cands = [candidato("a", 0, [9])]; // só quer o assento 9
+    const entrada = params(cands, assentos);
+    const alocacoes = [{ candidato: "a", assento: assentos[1].id, ordemPreferencia: 1 }];
+
+    const c = cascataDeVaga(entrada, alocacoes, assentos[0].id);
+    assert.equal(c.movimentos.length, 0);
+    assert.equal(c.assentoOcioso, assentos[0].id);
+    assert.equal(c.encerrouPor, "sem_candidato");
+  });
+
+  it("não move quem já está em opção igual ou melhor", () => {
+    const assentos = [assento(1, 1), assento(2, 1)];
+    // 'a' já está na 1ª opção; a vaga liberada é a 2ª opção dele.
+    const cands = [candidato("a", 50, [1, 2])];
+    const entrada = params(cands, assentos);
+    const alocacoes = [{ candidato: "a", assento: assentos[0].id, ordemPreferencia: 1 }];
+
+    const c = cascataDeVaga(entrada, alocacoes, assentos[1].id);
+    assert.equal(c.movimentos.length, 0, "ninguém desce de opção");
+  });
+
+  it("chama alguém da fila de espera e encerra a cadeia ali", () => {
+    const assentos = [assento(1, 1)];
+    const cands = [candidato("esperando", 0, [1])];
+    const entrada = params(cands, assentos);
+
+    const c = cascataDeVaga(entrada, [], assentos[0].id);
+    assert.equal(c.movimentos.length, 1);
+    assert.equal(c.movimentos[0].candidato, "esperando");
+    assert.equal(c.movimentos[0].assentoLiberado, null, "quem estava sem assento não libera nada");
+    assert.equal(c.assentoOcioso, null, "e a vaga não fica ociosa");
+  });
+
+  it("a cascata preserva a estabilidade da alocação", () => {
+    const rnd = prng(77);
+    const assentos = Array.from({ length: 25 }, (_, i) => assento(i + 1, 1 + Math.floor(rnd() * 4)));
+    const candidatos: Candidato[] = [];
+    for (let i = 0; i < 400; i++) {
+      const n = 1 + Math.floor(rnd() * 5);
+      const esc = new Set<number>();
+      while (esc.size < n) esc.add(1 + Math.floor(rnd() * 25));
+      candidatos.push(candidato(`c${i}`, rnd() < 0.94 ? 0 : Math.floor(rnd() * 100), [...esc]));
+    }
+    const entrada = params(candidatos, assentos);
+    const base = alocar(entrada);
+    assert.deepEqual(verificarEstabilidade(entrada, base), []);
+
+    // Libera a vaga de uma criança que desiste, e aplica a cascata.
+    const saindo = base.alocacoes[0];
+    const restantes = base.alocacoes.filter((a) => a.candidato !== saindo.candidato);
+    const c = cascataDeVaga(entrada, restantes, saindo.assento);
+
+    // Reconstrói a alocação resultante e confere que segue estável.
+    const mapa = new Map(restantes.map((a) => [a.candidato, a]));
+    for (const m of c.movimentos) {
+      mapa.set(m.candidato, {
+        candidato: m.candidato,
+        assento: m.assentoRecebido,
+        ordemPreferencia: m.ordemRecebida,
+      });
+    }
+    const depois = { ...base, alocacoes: [...mapa.values()] };
+    const semSaindo = {
+      ...entrada,
+      candidatos: candidatos.filter((x) => x.id !== saindo.candidato),
+    };
+    assert.deepEqual(
+      verificarEstabilidade(semSaindo, depois),
+      [],
+      "a cadeia não pode criar par bloqueador",
+    );
+  });
+
+  it("respeita o limite de passos", () => {
+    const assentos = [assento(1, 1), assento(2, 1), assento(3, 1)];
+    const cands = [candidato("a", 50, [1, 2]), candidato("b", 20, [2, 3])];
+    const entrada = params(cands, assentos);
+    const alocacoes = [
+      { candidato: "a", assento: assentos[1].id, ordemPreferencia: 2 },
+      { candidato: "b", assento: assentos[2].id, ordemPreferencia: 2 },
+    ];
+    const c = cascataDeVaga(entrada, alocacoes, assentos[0].id, 1);
+    assert.equal(c.movimentos.length, 1);
+    assert.equal(c.encerrouPor, "limite_atingido");
   });
 });
 

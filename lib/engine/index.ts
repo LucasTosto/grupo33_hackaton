@@ -341,6 +341,131 @@ export function verificarEstabilidade(p: ParametrosRodada, r: ResultadoRodada): 
   return violacoes;
 }
 
+// ──────────────────────────────────────────────────────── rodada contínua
+
+export interface MovimentoCascata {
+  passo: number;
+  candidato: string;
+  /** Assento que a criança passa a ocupar. */
+  assentoRecebido: AssentoId;
+  /** Qual opção dela foi atendida agora (1 = primeira). */
+  ordemRecebida: number;
+  /** Assento que ela desocupa ao subir — o próximo elo da cadeia. */
+  assentoLiberado: AssentoId | null;
+  /** Opção que ela ocupava antes, se ocupava alguma. */
+  ordemAnterior: number | null;
+  /** Quantos candidatos disputavam o assento que ela acabou de pegar. */
+  disputavam: number;
+}
+
+export interface Cascata {
+  assentoInicial: AssentoId;
+  movimentos: MovimentoCascata[];
+  /** Onde a cadeia parou: o assento que ninguém mais quis. */
+  assentoOcioso: AssentoId | null;
+  encerrouPor: "sem_candidato" | "limite_atingido";
+  candidatosAvaliados: number;
+  duracaoMs: number;
+}
+
+/**
+ * Reexecuta o processo sobre o **fecho da cascata**, não sobre a rede inteira.
+ *
+ * Uma vaga liberada no meio do ano não exige reprocessar 62 mil crianças. Ela
+ * inicia uma cadeia: o assento liberado vai para a criança de maior prioridade
+ * que o prefere ao que tem hoje; o assento que essa criança larga vai para a
+ * próxima; e assim por diante, até chegar num assento que ninguém à espera
+ * prefere. É isso que remove os dias mortos entre uma desistência e a próxima
+ * matrícula — hoje esse cálculo é feito no mundo físico, em semanas de telefonema.
+ *
+ * A cadeia preserva a estabilidade: cada passo dá o assento a quem tem a maior
+ * prioridade entre os que o querem, então nenhum par bloqueador é criado.
+ */
+export function cascataDeVaga(
+  p: ParametrosRodada,
+  alocacoes: Alocacao[],
+  assentoInicial: AssentoId,
+  limite = 50,
+): Cascata {
+  const t0 = performance.now();
+  const cands = prepara(p.candidatos, p.semente, p.ordemDesempate);
+
+  // Índice assento → quem o escolheu, e em que posição da preferência.
+  const interessados = new Map<AssentoId, { id: string; ordem: number }[]>();
+  for (const c of p.candidatos) {
+    for (const pref of c.preferencias) {
+      const l = interessados.get(pref.assento);
+      if (l) l.push({ id: c.id, ordem: pref.ordem });
+      else interessados.set(pref.assento, [{ id: c.id, ordem: pref.ordem }]);
+    }
+  }
+
+  // Estado corrente da alocação, que a cadeia vai alterando.
+  const atual = new Map<string, { assento: AssentoId; ordem: number }>();
+  for (const a of alocacoes) atual.set(a.candidato, { assento: a.assento, ordem: a.ordemPreferencia });
+
+  const movimentos: MovimentoCascata[] = [];
+  let avaliados = 0;
+  let fila: AssentoId[] = [assentoInicial];
+  let assentoOcioso: AssentoId | null = null;
+  let encerrouPor: "sem_candidato" | "limite_atingido" = "sem_candidato";
+
+  while (fila.length > 0) {
+    if (movimentos.length >= limite) {
+      encerrouPor = "limite_atingido";
+      break;
+    }
+    const vaga = fila.shift() as AssentoId;
+
+    // Melhor candidato que prefere esta vaga ao que tem hoje.
+    let melhor: CandidatoPreparado | null = null;
+    let melhorOrdem = 0;
+    const lista = interessados.get(vaga) ?? [];
+    for (const { id, ordem } of lista) {
+      avaliados++;
+      const c = cands.get(id);
+      if (!c) continue;
+      const tem = atual.get(id);
+      // Já está nesta vaga, ou já foi atendido em opção igual ou melhor.
+      if (tem && tem.ordem <= ordem) continue;
+      if (melhor === null || comparaPrioridade(c, melhor) > 0) {
+        melhor = c;
+        melhorOrdem = ordem;
+      }
+    }
+
+    if (melhor === null) {
+      assentoOcioso = vaga; // ninguém à espera quer: a cadeia termina aqui
+      break;
+    }
+
+    const anterior = atual.get(melhor.id) ?? null;
+    atual.set(melhor.id, { assento: vaga, ordem: melhorOrdem });
+    movimentos.push({
+      passo: movimentos.length + 1,
+      candidato: melhor.id,
+      assentoRecebido: vaga,
+      ordemRecebida: melhorOrdem,
+      assentoLiberado: anterior ? anterior.assento : null,
+      ordemAnterior: anterior ? anterior.ordem : null,
+      disputavam: lista.length,
+    });
+
+    // O assento que essa criança largou é o próximo elo.
+    if (anterior) fila = [anterior.assento];
+    else fila = []; // veio da fila de espera: a cadeia se encerra sem liberar nada
+  }
+
+  return {
+    assentoInicial,
+    movimentos,
+    assentoOcioso,
+    encerrouPor,
+    candidatosAvaliados: avaliados,
+    duracaoMs: Math.round((performance.now() - t0) * 100) / 100,
+  };
+}
+
 // ───────────────────────────────────────────────────── utilitários de assento
 
 export function assentoId(unidade: number, grupamento: string, horario: string): AssentoId {

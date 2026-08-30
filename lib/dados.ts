@@ -17,6 +17,8 @@ import unidadesJson from "./data/unidades.json";
 import {
   alocar,
   assentoId,
+  cascataDeVaga,
+  decodificaAssento,
   verificarEstabilidade,
   type Assento,
   type AssentoId,
@@ -364,6 +366,141 @@ export function resumoDaInscricao(insc: InscricaoViva): ResumoInscricao {
     totalCandidatos: parametros.candidatos.length,
     explicacao,
   };
+}
+
+// ────────────────────────────────────────────────────────── rodada contínua
+
+export interface EloDaCascata {
+  passo: number;
+  candidato: string;
+  unidade: string;
+  bairro: string | null;
+  grupamento: string;
+  horario: string;
+  ordemRecebida: number;
+  ordemAnterior: number | null;
+  unidadeAnterior: string | null;
+  disputavam: number;
+  /** Frase pronta para a tela e para o log de auditoria. */
+  descricao: string;
+}
+
+export interface VagaLiberada {
+  assento: AssentoId;
+  unidade: string;
+  bairro: string | null;
+  grupamento: string;
+  horario: string;
+  /** Criança cuja desistência abriu a vaga. */
+  desistente: string;
+  elos: EloDaCascata[];
+  /** Assento que sobrou no fim da cadeia, se sobrou. */
+  assentoOcioso: { unidade: string; grupamento: string; horario: string } | null;
+  candidatosAvaliados: number;
+  duracaoMs: number;
+  /** Quantas crianças a rede teria que reprocessar sem a cascata. */
+  filaCompleta: number;
+}
+
+function nomeDoAssento(id: AssentoId) {
+  const { unidade, grupamento, horario } = decodificaAssento(id);
+  const u = unidadePorCodigo(unidade);
+  return { nome: u?.nome ?? String(unidade), bairro: u?.bairro ?? null, grupamento, horario };
+}
+
+/**
+ * Simula uma desistência e mostra a cadeia que ela dispara.
+ *
+ * É o cenário que mais custa hoje: uma vaga liberada em março, e semanas de
+ * telefonema até alguém ocupá-la. O motor resolve a cadeia inteira sobre o fecho
+ * da cascata — algumas centenas de candidatos avaliados em vez das 62.899
+ * crianças da fila.
+ */
+export function simulaVagaLiberada(assento: AssentoId): VagaLiberada | null {
+  const base = rodada();
+  const ocupantes = base.resultado.alocacoes.filter((a) => a.assento === assento);
+  if (ocupantes.length === 0) return null;
+
+  // Quem desiste é o último ocupante da lista — o de menor prioridade no assento.
+  const desistente = ocupantes[ocupantes.length - 1];
+  const restantes = base.resultado.alocacoes.filter((a) => a.candidato !== desistente.candidato);
+
+  // Quem desistiu saiu do processo: se continuasse entre os candidatos, a cascata
+  // o veria como alguém sem assento querendo aquela vaga — e ele a retomaria na hora.
+  const parametros: ParametrosRodada = {
+    ...base.parametros,
+    candidatos: base.parametros.candidatos.filter((c) => c.id !== desistente.candidato),
+  };
+
+  const c = cascataDeVaga(parametros, restantes, assento);
+  const info = nomeDoAssento(assento);
+
+  const elos: EloDaCascata[] = c.movimentos.map((m) => {
+    const rec = nomeDoAssento(m.assentoRecebido);
+    const ant = m.assentoLiberado ? nomeDoAssento(m.assentoLiberado) : null;
+    return {
+      passo: m.passo,
+      candidato: m.candidato,
+      unidade: rec.nome,
+      bairro: rec.bairro,
+      grupamento: rec.grupamento,
+      horario: rec.horario,
+      ordemRecebida: m.ordemRecebida,
+      ordemAnterior: m.ordemAnterior,
+      unidadeAnterior: ant ? ant.nome : null,
+      disputavam: m.disputavam,
+      descricao: ant
+        ? `sobe da ${m.ordemAnterior}ª para a ${m.ordemRecebida}ª opção e libera ${ant.nome}`
+        : `sai da fila de espera para a ${m.ordemRecebida}ª opção`,
+    };
+  });
+
+  const ocioso = c.assentoOcioso ? nomeDoAssento(c.assentoOcioso) : null;
+
+  return {
+    assento,
+    unidade: info.nome,
+    bairro: info.bairro,
+    grupamento: info.grupamento,
+    horario: info.horario,
+    desistente: desistente.candidato,
+    elos,
+    assentoOcioso: ocioso
+      ? { unidade: ocioso.nome, grupamento: ocioso.grupamento, horario: ocioso.horario }
+      : null,
+    candidatosAvaliados: c.candidatosAvaliados,
+    duracaoMs: c.duracaoMs,
+    filaCompleta: parametros.candidatos.length,
+  };
+}
+
+/** Assentos disputados, bons para demonstrar a cascata (cadeia mais longa). */
+export function assentosParaSimular(quantos = 8): {
+  assento: AssentoId;
+  unidade: string;
+  bairro: string | null;
+  grupamento: string;
+  horario: string;
+  vagas: number;
+  procura: number;
+}[] {
+  const lista = [];
+  for (const u of unidades) {
+    for (const a of u.assentos) {
+      if (a.capacidade < 15 || a.procura < a.capacidade * 3) continue;
+      lista.push({
+        assento: assentoId(u.codigo, a.grupamento, a.horario),
+        unidade: u.nome,
+        bairro: u.bairro,
+        grupamento: a.grupamento,
+        horario: a.horario,
+        vagas: a.capacidade,
+        procura: a.procura,
+      });
+    }
+  }
+  lista.sort((x, y) => y.procura / y.vagas - x.procura / x.vagas);
+  return lista.slice(0, quantos);
 }
 
 // ─────────────────────────────────────────────────────────────── geografia

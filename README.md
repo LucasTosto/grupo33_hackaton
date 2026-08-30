@@ -2,9 +2,9 @@
 
 **Claude Impact Lab Rio · Eixos 2 e 3 · 30/08/2026**
 
-- **Equipe:** `PREENCHER — nome da equipe`
+- **Equipe:** `Team 33`
 - **Grupo nº:** 33
-- **Membros:** `PREENCHER — nomes completos`
+- **Membros:** `Camila Nascimento, João Assumpção, Pedro Moradillo, Lucas Tosto`
 - **Aplicação:** `PREENCHER — URL da Vercel`
 - **Vídeo demo (60s):** `PREENCHER`
 
@@ -114,6 +114,30 @@ Como consequência, **declarar a preferência verdadeira nunca prejudica a famí
 frente o comportamento relatado pela equipe da SME, a mãe que escolhe unidade por cálculo de chance e
 não por onde quer a vaga.
 
+### Rodada contínua: a vaga liberada em março
+
+Uma desistência no meio do ano não exige reprocessar a rede. Ela inicia uma **cadeia**: o assento
+liberado vai para a criança de maior prioridade que o prefere ao que tem hoje; o assento que ela larga
+vai para a próxima; e assim por diante, até chegar num assento que ninguém à espera prefere.
+
+Exemplo real da rodada, disponível em `/painel` (botão *liberar uma vaga*):
+
+```
+desistência em Edi Escritora Clarice Lispector · Maternal II · Integral
+  1  aluno_0081371   3ª → 1ª opção,  libera Edi Anna Maria Niemeyer
+  2  aluno_0017989   5ª → 3ª opção,  libera Edi Professora Emilia Maria Vieira
+  3  aluno_0091264   4ª → 3ª opção,  libera Edi Professora Matilde Rosa Lopes
+  4  aluno_0087740   5ª → 1ª opção,  libera Edi Compositor Roberto Ribeiro
+  5  aluno_0075458   2ª → 1ª opção,  libera Cp Aemmac - Anil
+  a cadeia para: ninguém à espera prefere Cp Aemmac - Anil ao que já tem
+
+5 crianças remanejadas · 1.612 candidatos avaliados de 62.898 · 188 ms
+```
+
+Uma desistência, cinco crianças em opção melhor, em 188 ms. Hoje esse mesmo cálculo é feito no mundo
+físico, em série, a três dias úteis por convite. **É aqui que os dias mortos moram** — e a cadeia
+preserva a estabilidade, o que é verificado em teste sobre instância aleatória.
+
 ### A criança, não a inscrição
 
 A chave de uma inscrição na base é `(polo, inscrição)`, e **a mesma criança pode estar inscrita em
@@ -128,7 +152,7 @@ antes da rodada ([`lib/fila.ts`](lib/fila.ts)).
 | `/` | O problema, com os números do processo real de 2025 e a tabela do backtest |
 | `/inscricao` | Inscrição em 5 passos: nascimento → bairro → até 5 creches ordenadas → 13 critérios → conferir |
 | `/acompanhar` | Convite, posição na fila e fila de melhoria da inscrição feita |
-| `/painel` | A rodada por dentro: identidade, garantias, ociosidade por assento e pressão por bairro |
+| `/painel` | A rodada por dentro: identidade, garantias, **simulador de vaga liberada**, ociosidade por assento e pressão por bairro |
 
 Escolhas de produto que valem menção:
 
@@ -150,6 +174,7 @@ app/                     Next.js 16 · App Router
   painel/                painel da rede (force-static: a rodada roda no build)
   api/unidades/          creches por assento, ordenadas por distância
   api/inscricao/         valida, roda a classificação, devolve convite + comprovantes
+  api/cascata/           simula uma vaga liberada e devolve a cadeia de remanejamento
 
 lib/
   engine/index.ts        MOTOR — arquivo único, zero dependências
@@ -163,7 +188,7 @@ scripts/
   capacidade_real.py     capacidade = o que a rede de fato matriculou em 2025
   backtest.ts            motor × processo real → lib/data/backtest.json
 
-test/engine.test.ts      18 testes, sem transpilador (type-stripping do Node 24)
+test/engine.test.ts      25 testes, sem transpilador (type-stripping do Node 24)
 ```
 
 Decisões que sustentam o resto:
@@ -186,7 +211,7 @@ Decisões que sustentam o resto:
 ```bash
 npm install
 npm run dev              # http://localhost:3000
-npm test                 # 18 testes do motor
+npm test                 # 25 testes do motor
 npm run build
 ```
 
@@ -211,8 +236,9 @@ Claude Opus 5 conduziu o trabalho de ponta a ponta dentro do Claude Code, em uma
 2. **Escreveu os extratores em Python** sobre 837 mil linhas da Query A e 4,36 milhões da Query B,
    com leitura em blocos, e reproduziu de forma independente os números que tínhamos levantado à mão
    (93,8% empatados em zero, 6,2% de comprovação).
-3. **Implementou o motor e os 18 testes**, incluindo a verificação adversarial de estabilidade — que
-   é o que pegou o bug de alocação por inscrição em vez de por criança.
+3. **Implementou o motor e os 25 testes**, incluindo a verificação adversarial de estabilidade — que
+   é o que pegou dois bugs reais: alocação por inscrição em vez de por criança, e a criança que
+   desistia retomando o próprio assento na cascata por não ter sido removida do processo.
 4. **Construiu a aplicação inteira** e o backtest que gera a tabela deste README.
 
 O achado da lacuna entre declarar (68,2%) e comprovar (6,2%) foi o que mudou o desenho do produto: em

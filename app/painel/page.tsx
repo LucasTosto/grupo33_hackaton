@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 
-import { backtest, catalogo, fatos, rodada, unidades, type Unidade } from "@/lib/dados";
+import { assentosParaSimular, backtest, catalogo, fatos, rodada, unidades, type Unidade } from "@/lib/dados";
+
+import Cascata from "./Cascata";
 
 /**
  * A rodada completa (62.899 crianças, 2.114 assentos) mais a verificação de
@@ -121,6 +123,12 @@ export default function Pagina() {
             apoio={`de ${n(fatos.inscricoes)} inscrições`}
           />
         </dl>
+      </section>
+
+      {/* ─── rodada contínua */}
+      <section className="mb-12">
+        <h2 className="rotulo mb-3">Rodada contínua · uma vaga liberada no meio do ano</h2>
+        <Cascata opcoes={assentosParaSimular(10)} />
       </section>
 
       {/* ─── ocupação */}
