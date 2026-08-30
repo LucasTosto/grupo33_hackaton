@@ -3,6 +3,9 @@ import Link from "next/link";
 import { backtest, catalogo, fatos } from "@/lib/dados";
 
 const n = (v: number) => v.toLocaleString("pt-BR");
+/** Decimal em pt-BR: 72,2 e não 72.2. */
+const dec = (v: number) =>
+  v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 export default function Pagina() {
   const maiorCriterio = [...catalogo.criterios].sort((a, b) => b.pontos - a.pontos)[0];
@@ -55,7 +58,7 @@ export default function Pagina() {
               />
               <Bloco
                 rotulo="Empatadas em zero"
-                valor={`${fatos.empatadosEmZeroPct}%`}
+                valor={`${dec(fatos.empatadosEmZeroPct)}%`}
                 apoio={`${n(fatos.empatadosEmZero)} inscrições com a mesma nota — a régua praticamente não classifica`}
               />
               <Bloco
@@ -68,8 +71,8 @@ export default function Pagina() {
             <div className="mb-6 border-l-[3px] border-break bg-surface px-5 py-4">
               <p className="rotulo mb-2">O achado que reordena as prioridades</p>
               <p className="mb-3 text-[15.5px]">
-                <strong>{fatos.declararamCriterioPct}%</strong> das inscrições declararam ao menos um critério
-                de prioridade. Apenas <strong>{fatos.comprovaramCriterioPct}%</strong> chegaram à
+                <strong>{dec(fatos.declararamCriterioPct)}%</strong> das inscrições declararam ao menos um
+                critério de prioridade. Apenas <strong>{dec(fatos.comprovaramCriterioPct)}%</strong> chegaram à
                 classificação com pontuação acima de zero. O campo de confirmação não marca critério a
                 critério: marca se a família compareceu para comprovar. Quem não vai perde tudo de uma vez.
               </p>
@@ -136,8 +139,8 @@ export default function Pagina() {
                   />
                   <Comparacao
                     rotulo="Atendidas na 1ª opção"
-                    real={`${backtest.historico.primeiraOpcaoPct}%`}
-                    motor={`${backtest.motor.primeiraOpcaoPct}%`}
+                    real={`${dec(backtest.historico.primeiraOpcaoPct)}%`}
+                    motor={`${dec(backtest.motor.primeiraOpcaoPct)}%`}
                     destaque
                   />
                   <Comparacao
@@ -158,7 +161,7 @@ export default function Pagina() {
               O ganho não vem de acelerar o convite. Vem de nunca emitir os quatro convites que não podem ser
               aceitos. <strong>{n(backtest.ganhos.assentosLiberadosDeImediato)} assentos</strong> deixam de
               ficar congelados, e o atendimento na primeira opção sobe{" "}
-              <strong>{backtest.ganhos.pontosDeAumentoNaPrimeiraOpcao} pontos percentuais</strong>.
+              <strong>{dec(backtest.ganhos.pontosDeAumentoNaPrimeiraOpcao)} pontos percentuais</strong>.
             </p>
             <p className="max-w-[62ch] text-[14.5px] text-ink-3">
               A rodada inteira — {n(backtest.rodada.criancas)} crianças, {n(backtest.rodada.assentos)} assentos,{" "}

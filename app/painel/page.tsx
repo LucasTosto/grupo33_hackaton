@@ -16,6 +16,9 @@ export const metadata: Metadata = {
 };
 
 const n = (v: number) => v.toLocaleString("pt-BR");
+/** Decimal em pt-BR: 8,3 e não 8.3. */
+const dec = (v: number) =>
+  v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 export default function Pagina() {
   const { resultado, violacoes, duracaoMs } = rodada();
@@ -125,7 +128,12 @@ export default function Pagina() {
         <h2 className="rotulo mb-3">Ocupação da rede</h2>
         <dl className="mb-4 grid gap-px border border-rule bg-rule sm:grid-cols-4">
           <Cel rotulo="vagas do processo" valor={n(vagasTotais)} apoio={`em ${n(porAssento.size)} assentos`} />
-          <Cel rotulo="vagas preenchidas" valor={n(preenchidas)} tom="match" apoio={`${((100 * preenchidas) / vagasTotais).toFixed(1)}% da capacidade`} />
+          <Cel
+            rotulo="vagas preenchidas"
+            valor={n(preenchidas)}
+            tom="match"
+            apoio={`${dec((100 * preenchidas) / vagasTotais)}% da capacidade`}
+          />
           <Cel
             rotulo="vagas ociosas"
             valor={n(vagasOciosas)}
@@ -168,7 +176,7 @@ export default function Pagina() {
             {pressao.slice(0, 10).map((x) => (
               <li key={x.id} className="flex items-baseline gap-3 px-4 py-3">
                 <span className="num w-12 shrink-0 text-right text-[15px] font-semibold text-break">
-                  {x.razao.toFixed(1)}×
+                  {dec(x.razao)}×
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-display text-[14.5px] font-semibold">
@@ -206,7 +214,7 @@ export default function Pagina() {
                   <td className="num border-b border-rule px-4 py-2.5 text-right">{n(b.vagas)}</td>
                   <td className="num border-b border-rule px-4 py-2.5 text-right">{n(b.procura)}</td>
                   <td className="num border-b border-rule px-4 py-2.5 text-right font-semibold text-break">
-                    {b.razao.toFixed(1)}×
+                    {dec(b.razao)}×
                   </td>
                 </tr>
               ))}
