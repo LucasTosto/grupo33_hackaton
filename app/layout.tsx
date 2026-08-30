@@ -8,9 +8,11 @@ export const metadata: Metadata = {
     "Inscrição em creche da rede municipal do Rio de Janeiro com um convite por criança, posição na fila visível e classificação auditável.",
 };
 
+/** Rótulos em versal, como na navegação do matricula.rio. */
 const NAV = [
+  { href: "/", rotulo: "Início" },
   { href: "/inscricao", rotulo: "Inscrição" },
-  { href: "/acompanhar", rotulo: "Acompanhar" },
+  { href: "/acompanhar", rotulo: "Consulta inscrição" },
   { href: "/painel", rotulo: "Painel da rede" },
 ];
 
@@ -21,55 +23,151 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+          href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700;9..40,900&family=DM+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body className="antialiased">
+      <body>
         <a
           href="#conteudo"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-ink focus:px-4 focus:py-2 focus:text-surface"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-azul focus:px-4 focus:py-2 focus:text-white"
         >
-          Pular para o conteúdo
+          Ir para o conteúdo
         </a>
 
-        <header className="border-b border-rule bg-surface">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3">
-            <Link href="/" className="font-display text-[17px] font-extrabold tracking-tight">
-              Vaga Certa
-              <span className="ml-2 rotulo font-normal">SME Rio</span>
-            </Link>
-            <nav className="ml-auto flex gap-5 font-mono text-[12px] tracking-wide">
-              {NAV.map((n) => (
-                <Link key={n.href} href={n.href} className="text-ink-2 underline-offset-4 hover:underline">
-                  {n.rotulo}
-                </Link>
-              ))}
-            </nav>
+        {/* ── barra utilitária: liga o serviço ao portal da Prefeitura ── */}
+        <div className="bg-azul-escuro text-white">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-1 px-5 py-1.5">
+            <a
+              href="https://prefeitura.rio"
+              rel="noreferrer noopener"
+              target="_blank"
+              className="text-[11.5px] font-bold tracking-[0.08em] uppercase underline-offset-2 hover:underline"
+            >
+              Prefeitura.rio
+            </a>
+            <p className="text-[11.5px] text-white/70">Compatível com leitores de tela</p>
+          </div>
+        </div>
+
+        {/* ── assinatura institucional ── */}
+        <header className="border-b-4 border-azul-claro bg-azul text-white">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-3 px-5 py-4">
+            {/* Marca reduzida a tipografia: o brasão oficial não é nosso para usar. */}
+            <div className="border-r border-white/25 pr-5">
+              <p className="text-[10.5px] font-medium tracking-[0.14em] uppercase text-white/75">
+                Prefeitura do Rio de Janeiro
+              </p>
+              <p className="text-[15px] font-bold tracking-[-0.01em]">Secretaria Municipal de Educação</p>
+            </div>
+            <div>
+              <Link href="/" className="block">
+                <span className="block text-[22px] font-black tracking-[-0.03em] uppercase leading-none">
+                  Vaga Certa
+                </span>
+                <span className="mt-0.5 block text-[12px] text-azul-claro">
+                  Inscrição em creche · Processo 195/2025
+                </span>
+              </Link>
+            </div>
           </div>
         </header>
 
+        {/* ── navegação ── */}
+        <nav aria-label="Navegação principal" className="border-b border-linha bg-white">
+          <div className="mx-auto max-w-6xl px-5">
+            <ul className="flex flex-wrap">
+              {NAV.map((n) => (
+                <li key={n.href}>
+                  <Link
+                    href={n.href}
+                    className="block border-b-[3px] border-transparent px-4 py-3.5 text-[12.5px] font-bold tracking-[0.06em] uppercase text-azul transition hover:border-azul-claro hover:bg-azul-10"
+                  >
+                    {n.rotulo}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </nav>
+
         <main id="conteudo">{children}</main>
 
-        <footer className="mt-24 border-t border-rule bg-surface">
-          <div className="mx-auto max-w-5xl px-5 py-10 text-[13.5px] text-ink-2">
-            <p className="mb-3 max-w-[62ch]">
-              Protótipo construído no Claude Impact Lab Rio a partir das bases públicas anonimizadas da
-              Secretaria Municipal de Educação. Não é um canal oficial de inscrição: a inscrição válida é
-              feita no{" "}
-              <a
-                className="underline decoration-rule underline-offset-2"
-                href="https://matricula.rio"
-                rel="noreferrer noopener"
-                target="_blank"
-              >
-                matricula.rio
-              </a>
-              .
-            </p>
-            <p className="rotulo">
-              Dados: CIT-SME-RJ/dadoscreche · processo 195 (2025) · 71.949 inscrições
-            </p>
+        {/* ── rodapé institucional ── */}
+        <footer className="mt-16 border-t-4 border-azul-claro bg-azul text-white">
+          <div className="mx-auto grid max-w-6xl gap-8 px-5 py-10 md:grid-cols-3">
+            <div>
+              <p className="text-[10.5px] font-medium tracking-[0.14em] uppercase text-white/70">
+                Prefeitura do Rio de Janeiro
+              </p>
+              <p className="mt-1 text-[15px] font-bold">Secretaria Municipal de Educação</p>
+              <p className="mt-3 text-[13.5px] leading-relaxed text-white/80">
+                Rua Afonso Cavalcanti, 455 — Cidade Nova
+                <br />
+                Rio de Janeiro · RJ
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[11.5px] font-bold tracking-[0.08em] uppercase text-azul-claro">
+                Serviços relacionados
+              </p>
+              <ul className="mt-3 space-y-1.5 text-[13.5px]">
+                <li>
+                  <a
+                    className="underline-offset-2 hover:underline"
+                    href="https://matricula.rio"
+                    rel="noreferrer noopener"
+                    target="_blank"
+                  >
+                    matricula.rio
+                  </a>
+                </li>
+                <li>
+                  <a
+                    className="underline-offset-2 hover:underline"
+                    href="https://educacao.prefeitura.rio"
+                    rel="noreferrer noopener"
+                    target="_blank"
+                  >
+                    educacao.prefeitura.rio
+                  </a>
+                </li>
+                <li>
+                  <a
+                    className="underline-offset-2 hover:underline"
+                    href="https://prefeitura.rio"
+                    rel="noreferrer noopener"
+                    target="_blank"
+                  >
+                    prefeitura.rio
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="text-[11.5px] font-bold tracking-[0.08em] uppercase text-azul-claro">
+                Sobre este protótipo
+              </p>
+              <p className="mt-3 text-[13.5px] leading-relaxed text-white/80">
+                Construído no Claude Impact Lab Rio a partir das bases públicas anonimizadas da SME.{" "}
+                <strong className="font-bold text-white">Não é um canal oficial de inscrição</strong> — a
+                inscrição válida é feita no matricula.rio.
+              </p>
+              <p className="mt-3 text-[12px] text-white/60">
+                Dados: CIT-SME-RJ/dadoscreche · processo 195 · 71.949 inscrições
+              </p>
+            </div>
+          </div>
+
+          <div className="border-t border-white/15">
+            <div className="mx-auto max-w-6xl px-5 py-3.5">
+              <p className="text-[11.5px] text-white/60">
+                Identidade visual conforme o Manual de Marca Prefeitura Rio 2025. Tipografia oficial Cera Pro
+                substituída por DM Sans, por ser fonte comercial não redistribuível.
+              </p>
+            </div>
           </div>
         </footer>
       </body>

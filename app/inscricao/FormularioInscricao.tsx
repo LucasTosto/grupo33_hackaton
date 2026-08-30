@@ -78,7 +78,7 @@ interface Props {
 }
 
 const CHAVE_LOCAL = "vaga-certa:inscricao";
-const PASSOS = ["A criança", "Onde vocês moram", "As creches", "Critérios", "Conferir"] as const;
+const PASSOS = ["A criança", "Endereço", "Creches", "Critérios", "Conferência"] as const;
 
 // ───────────────────────────────────────────────────────────────── auxiliares
 
@@ -96,6 +96,8 @@ function grupamentoDe(nascimento: string, ano: number): string | null {
 function plural(n: number, um: string, muitos: string) {
   return `${n.toLocaleString("pt-BR")} ${n === 1 ? um : muitos}`;
 }
+
+const n = (v: number) => v.toLocaleString("pt-BR");
 
 // ────────────────────────────────────────────────────────────── componente
 
@@ -126,7 +128,6 @@ export default function FormularioInscricao({
     [criterios, marcados],
   );
 
-  // Busca as creches quando grupamento, horário ou bairro mudam.
   useEffect(() => {
     if (!grupamento || !horario) return;
     let vivo = true;
@@ -139,7 +140,6 @@ export default function FormularioInscricao({
         if (!vivo) return;
         const lista: UnidadeEscolha[] = d.unidades ?? [];
         setUnidades(lista);
-        // Remove opções que deixaram de existir para o novo assento.
         const validas = new Set(lista.map((u) => u.codigo));
         setEscolhidas((atual) => atual.filter((c) => validas.has(c)));
       })
@@ -153,8 +153,7 @@ export default function FormularioInscricao({
 
   // Aquece o motor enquanto a família escolhe as creches: sem isso, o primeiro
   // envio numa instância fria paga a decodificação da fila inteira mais a rodada
-  // base, uns 6 s de espera olhando um botão. Dispara uma vez só, e sem abortar
-  // na troca de passo — cancelar o aquecimento no meio anularia o ganho.
+  // base. Dispara uma vez só, e sem abortar na troca de passo.
   const jaAqueceu = useRef(false);
   useEffect(() => {
     if (passo < 2 || jaAqueceu.current) return;
@@ -228,9 +227,9 @@ export default function FormularioInscricao({
 
   const podeAvancar = [
     Boolean(grupamento) && Boolean(horario),
-    true, // bairro é opcional: sem ele, a lista não ordena por distância
+    true,
     escolhidas.length > 0,
-    true, // nenhum critério é obrigatório
+    true,
     escolhidas.length > 0,
   ][passo];
 
@@ -239,365 +238,405 @@ export default function FormularioInscricao({
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-5 py-10">
+    <div className="mx-auto max-w-4xl px-5 py-9">
+      <p className="rotulo mb-2 text-azul-medio">Formulário de inscrição</p>
+      <h1 className="mb-7 text-[clamp(24px,4vw,32px)] font-black tracking-[-0.025em] text-azul">
+        Inscrição em creche · Processo 195/2025
+      </h1>
+
       <Trilha passo={passo} />
 
-      {passo === 0 && (
-        <Secao
-          titulo="A criança"
-          apoio="O grupamento é calculado pela idade completada até 31 de março, como manda a Resolução. Você não escolhe: o sistema deriva."
-        >
-          <label className="block">
-            <span className="rotulo">Mês e ano de nascimento</span>
-            <input
-              type="month"
-              value={nascimento}
-              max={`${anoProcesso}-12`}
-              min={`${anoProcesso - 4}-01`}
-              onChange={(e) => setNascimento(e.target.value)}
-              className="mt-2 w-full border border-rule bg-white px-4 py-3 font-mono text-[15px]"
-            />
-          </label>
+      <div className="cartao mt-6 overflow-hidden">
+        <p className="cartao-titulo">
+          Etapa {passo + 1} de {PASSOS.length} — {PASSOS[passo]}
+        </p>
 
-          {nascimento && (
-            <div className="mt-4 border-l-[3px] border-ink bg-white px-4 py-3">
-              {grupamento ? (
-                <p className="text-[15px]">
-                  Grupamento: <strong className="font-display">{grupamento}</strong>
-                  <span className="ml-2 text-ink-3">— idade em 31/03/{anoProcesso}</span>
-                </p>
-              ) : (
-                <p className="text-[15px] text-break">
-                  Pela data informada, a criança não se enquadra em creche neste processo. A vaga de creche
-                  atende até 3 anos incompletos em 31 de março.
-                </p>
-              )}
-            </div>
-          )}
-
-          <fieldset className="mt-7">
-            <legend className="rotulo mb-2">Horário</legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {(["Integral", "Parcial"] as const).map((h) => (
-                <button
-                  key={h}
-                  type="button"
-                  onClick={() => setHorario(h)}
-                  aria-pressed={horario === h}
-                  className={`border px-4 py-4 text-left transition ${
-                    horario === h ? "border-ink bg-ink text-surface" : "border-rule bg-white hover:border-ink-3"
-                  }`}
-                >
-                  <span className="font-display text-[16px] font-semibold">{h}</span>
-                  <span className={`mt-1 block text-[13px] ${horario === h ? "text-paper/80" : "text-ink-3"}`}>
-                    {h === "Integral" ? "Dia inteiro, com refeições" : "Meio período"}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </fieldset>
-        </Secao>
-      )}
-
-      {passo === 1 && (
-        <Secao
-          titulo="Onde vocês moram"
-          apoio="Serve para ordenar as creches por proximidade. Em 2025, 48% das opções escolhidas ficavam em bairro diferente do da família — e a taxa de matrícula caía junto."
-        >
-          <label className="block">
-            <span className="rotulo">Bairro</span>
-            <select
-              value={bairro}
-              onChange={(e) => setBairro(e.target.value)}
-              className="mt-2 w-full border border-rule bg-white px-4 py-3 text-[15px]"
-            >
-              <option value="">Prefiro não informar</option>
-              {bairros.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className="mt-3 text-[13.5px] text-ink-2">
-            A distância é calculada até o centro do bairro, não até sua casa. A base de dados não guarda
-            endereço completo, e este protótipo também não pede.
-          </p>
-        </Secao>
-      )}
-
-      {passo === 2 && (
-        <Secao
-          titulo="As creches"
-          apoio={`Escolha até ${maxOpcoes}, na ordem que você realmente prefere. Ordenar pela preferência verdadeira nunca reduz sua chance — o motor é à prova de estratégia.`}
-        >
-          {!grupamento || !horario ? (
-            <p className="text-break">Volte ao primeiro passo: falta o nascimento ou o horário.</p>
-          ) : (
-            <>
-              <div className="mb-5 border border-rule bg-white">
-                <div className="border-b border-rule px-4 py-3">
-                  <p className="rotulo">
-                    Sua ordem de preferência · {escolhidas.length} de {maxOpcoes}
-                  </p>
-                </div>
-                {escolhidas.length === 0 ? (
-                  <p className="px-4 py-5 text-[14px] text-ink-3">
-                    Nenhuma creche escolhida ainda. Use a lista abaixo.
-                  </p>
-                ) : (
-                  <ol className="divide-y divide-rule">
-                    {escolhidas.map((codigo, i) => {
-                      const u = porCodigo.get(codigo);
-                      return (
-                        <li key={codigo} className="flex items-center gap-3 px-4 py-3">
-                          <span className="num flex size-7 shrink-0 items-center justify-center bg-ink text-[13px] font-semibold text-surface">
-                            {i + 1}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-display text-[15px] font-semibold">
-                              {u?.nome ?? codigo}
-                            </span>
-                            <span className="rotulo">
-                              {u?.bairro}
-                              {u && u.distanciaKm !== null ? ` · ${u.distanciaKm} km` : ""}
-                              {u ? ` · ${plural(u.vagas, "vaga", "vagas")}` : ""}
-                            </span>
-                          </span>
-                          <span className="flex shrink-0 gap-1">
-                            <BotaoIcone rotulo={`Subir ${u?.nome ?? ""}`} onClick={() => move(i, -1)} desabilitado={i === 0}>
-                              ↑
-                            </BotaoIcone>
-                            <BotaoIcone
-                              rotulo={`Descer ${u?.nome ?? ""}`}
-                              onClick={() => move(i, 1)}
-                              desabilitado={i === escolhidas.length - 1}
-                            >
-                              ↓
-                            </BotaoIcone>
-                            <BotaoIcone rotulo={`Remover ${u?.nome ?? ""}`} onClick={() => remove(codigo)}>
-                              ✕
-                            </BotaoIcone>
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                )}
-              </div>
-
-              <label className="block">
-                <span className="rotulo">Buscar por nome ou bairro</span>
+        <div className="p-5 md:p-7">
+          {/* ───────────────────────────── etapa 1 */}
+          {passo === 0 && (
+            <Secao apoio="O grupamento é calculado pela idade completada até 31 de março, como determina a Resolução. A família não escolhe: o sistema deriva da data de nascimento.">
+              <label className="block max-w-sm">
+                <span className="rotulo mb-1.5 block">Mês e ano de nascimento</span>
                 <input
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Ex.: Caju, CM Ladeira"
-                  className="mt-2 w-full border border-rule bg-white px-4 py-3 text-[15px]"
+                  type="month"
+                  value={nascimento}
+                  max={`${anoProcesso}-12`}
+                  min={`${anoProcesso - 4}-01`}
+                  onChange={(e) => setNascimento(e.target.value)}
+                  className="campo num"
                 />
               </label>
 
-              <p className="rotulo mt-5 mb-2">
-                {carregandoUnidades
-                  ? "Carregando creches…"
-                  : `${plural(unidades.length, "creche oferece", "creches oferecem")} ${grupamento} · ${horario}`}
-              </p>
+              {nascimento && (
+                <div className={`tarja mt-4 ${grupamento ? "" : "border-l-erro bg-erro-fundo"}`}>
+                  {grupamento ? (
+                    <p className="text-[15px]">
+                      Grupamento: <strong className="text-azul">{grupamento}</strong>
+                      <span className="ml-2 text-texto-3">— idade em 31/03/{anoProcesso}</span>
+                    </p>
+                  ) : (
+                    <p className="text-[15px] text-erro">
+                      Pela data informada, a criança não se enquadra em creche neste processo. A vaga de
+                      creche atende até 3 anos incompletos em 31 de março.
+                    </p>
+                  )}
+                </div>
+              )}
 
-              <ul className="divide-y divide-rule border border-rule bg-white">
-                {filtradas.map((u) => (
-                  <li key={u.codigo} className="flex items-center gap-3 px-4 py-3">
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-display text-[15px] font-semibold">{u.nome}</span>
-                      <span className="rotulo">
-                        {u.bairro}
-                        {u.distanciaKm !== null ? ` · ${u.distanciaKm} km` : ""}
-                        {u.cre ? ` · CRE ${u.cre}` : ""}
-                      </span>
-                      <span className="mt-1 block text-[13px] text-ink-2">
-                        {plural(u.vagas, "vaga", "vagas")} ·{" "}
-                        <span
-                          className={
-                            u.concorrencia > 6 ? "text-break" : u.concorrencia > 3 ? "text-signal" : "text-match"
-                          }
-                        >
-                          {u.concorrencia} candidatos por vaga em 2025
-                        </span>
-                      </span>
-                    </span>
+              <fieldset className="mt-7">
+                <legend className="rotulo mb-2">Horário pretendido</legend>
+                <div className="grid gap-3 sm:grid-cols-2 sm:max-w-lg">
+                  {(["Integral", "Parcial"] as const).map((h) => (
                     <button
+                      key={h}
                       type="button"
-                      onClick={() => adiciona(u.codigo)}
-                      disabled={escolhidas.length >= maxOpcoes}
-                      className="shrink-0 border border-ink px-4 py-2 font-mono text-[12px] tracking-wide transition hover:bg-ink hover:text-surface disabled:cursor-not-allowed disabled:border-rule disabled:text-ink-3"
+                      onClick={() => setHorario(h)}
+                      aria-pressed={horario === h}
+                      className={`rounded border-2 px-4 py-3.5 text-left transition ${
+                        horario === h
+                          ? "border-azul bg-azul text-white"
+                          : "border-linha-forte bg-white hover:border-azul"
+                      }`}
                     >
-                      escolher
-                    </button>
-                  </li>
-                ))}
-                {!carregandoUnidades && filtradas.length === 0 && (
-                  <li className="px-4 py-5 text-[14px] text-ink-3">Nenhuma creche encontrada para essa busca.</li>
-                )}
-              </ul>
-            </>
-          )}
-        </Secao>
-      )}
-
-      {passo === 3 && (
-        <Secao
-          titulo="Critérios de prioridade"
-          apoio="Marque o que se aplica à sua família. Só conta na classificação o que for comprovado com documento — na tela seguinte você recebe a lista do que levar."
-        >
-          <div className="mb-5 flex items-baseline justify-between border border-rule bg-white px-4 py-3">
-            <span className="rotulo">Pontuação declarada</span>
-            <span className="num font-display text-[26px] font-extrabold">
-              {pontos}
-              <span className="text-[15px] font-normal text-ink-3"> / {pontuacaoMaxima}</span>
-            </span>
-          </div>
-
-          <ul className="divide-y divide-rule border border-rule bg-white">
-            {criterios.map((c) => {
-              const ativo = marcados.includes(c.pergId);
-              return (
-                <li key={c.pergId}>
-                  <label className="flex cursor-pointer items-start gap-3 px-4 py-4 hover:bg-paper/40">
-                    <input
-                      type="checkbox"
-                      checked={ativo}
-                      onChange={() =>
-                        setMarcados((a) => (ativo ? a.filter((p) => p !== c.pergId) : [...a, c.pergId]))
-                      }
-                      className="mt-1 size-5 shrink-0"
-                    />
-                    <span className="flex-1">
-                      <span className="block text-[15px]">{c.texto}</span>
-                      <span className="rotulo mt-1 block">
-                        {c.desempate
-                          ? "critério de desempate · 0 ponto"
-                          : `${c.pontos} ${c.pontos === 1 ? "ponto" : "pontos"}`}
+                      <span className="block text-[16px] font-bold">{h}</span>
+                      <span className={`mt-0.5 block text-[13px] ${horario === h ? "text-azul-claro" : "text-texto-3"}`}>
+                        {h === "Integral" ? "Dia inteiro, com refeições" : "Meio período"}
                       </span>
-                    </span>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-
-          <div className="mt-5 border-l-[3px] border-signal bg-white px-4 py-3">
-            <p className="rotulo mb-1">Por que insistimos em comprovação</p>
-            <p className="text-[14px] text-ink-2">
-              Em 2025, 68,2% das inscrições declararam ao menos um critério e apenas 6,2% chegaram à
-              classificação com pontuação acima de zero. A diferença não é fraude: é gente que não conseguiu
-              comparecer para comprovar. Quem não comprova entra empatado em zero com 93,8% da fila.
-            </p>
-          </div>
-        </Secao>
-      )}
-
-      {passo === 4 && (
-        <Secao titulo="Conferir e enviar" apoio="Revise antes de enviar. Você pode voltar e mudar qualquer resposta.">
-          <dl className="divide-y divide-rule border border-rule bg-white">
-            <Linha rotulo="Grupamento">{grupamento ?? "—"}</Linha>
-            <Linha rotulo="Horário">{horario || "—"}</Linha>
-            <Linha rotulo="Bairro">{bairro || "não informado"}</Linha>
-            <Linha rotulo="Pontuação declarada">
-              {pontos} de {pontuacaoMaxima}
-            </Linha>
-            <Linha rotulo="Creches escolhidas">
-              <ol className="list-inside list-decimal">
-                {escolhidas.map((c) => (
-                  <li key={c}>{porCodigo.get(c)?.nome ?? c}</li>
-                ))}
-              </ol>
-            </Linha>
-          </dl>
-
-          {erros.length > 0 && (
-            <div className="mt-5 border-l-[3px] border-break bg-break-soft px-4 py-3" role="alert">
-              <p className="rotulo mb-1 text-break">Não foi possível enviar</p>
-              <ul className="list-inside list-disc text-[14px]">
-                {erros.map((e) => (
-                  <li key={e}>{e}</li>
-                ))}
-              </ul>
-            </div>
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            </Secao>
           )}
 
-          <button
-            type="button"
-            onClick={enviar}
-            disabled={enviando || escolhidas.length === 0}
-            className="mt-6 w-full bg-ink px-6 py-4 font-display text-[16px] font-semibold text-surface transition hover:bg-ink-2 disabled:cursor-not-allowed disabled:bg-rule"
-          >
-            {enviando ? "Rodando a classificação…" : "Enviar inscrição"}
-          </button>
-          <p className="mt-3 text-center text-[13px] text-ink-3">
-            A rodada é executada na hora, sobre a fila real de 2025.
-          </p>
-        </Secao>
-      )}
+          {/* ───────────────────────────── etapa 2 */}
+          {passo === 1 && (
+            <Secao apoio="Serve para ordenar as creches por proximidade. Em 2025, 48% das opções escolhidas ficavam em bairro diferente do da família — e a taxa de matrícula caía junto.">
+              <label className="block max-w-md">
+                <span className="rotulo mb-1.5 block">Bairro de residência</span>
+                <select value={bairro} onChange={(e) => setBairro(e.target.value)} className="campo">
+                  <option value="">Prefiro não informar</option>
+                  {bairros.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="mt-3 max-w-[62ch] text-[14px] text-texto-3">
+                A distância é calculada até o centro do bairro, não até a residência. A base de dados não
+                guarda endereço completo, e este formulário também não solicita.
+              </p>
+            </Secao>
+          )}
 
-      <div className="mt-8 flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => setPasso((p) => Math.max(0, p - 1))}
-          disabled={passo === 0}
-          className="border border-rule px-5 py-3 font-mono text-[12px] tracking-wide disabled:opacity-40"
-        >
-          ← voltar
-        </button>
-        {passo < PASSOS.length - 1 && (
+          {/* ───────────────────────────── etapa 3 */}
+          {passo === 2 && (
+            <Secao
+              apoio={`Escolha até ${maxOpcoes} creches, na ordem que a família realmente prefere. Declarar a preferência verdadeira nunca reduz a chance de vaga.`}
+            >
+              {!grupamento || !horario ? (
+                <p className="text-erro">Volte à primeira etapa: falta o nascimento ou o horário.</p>
+              ) : (
+                <>
+                  <div className="cartao mb-6 overflow-hidden border-azul">
+                    <div className="flex items-baseline justify-between bg-azul-10 px-4 py-2.5">
+                      <p className="rotulo text-azul">Ordem de preferência</p>
+                      <p className="num text-[13px] font-bold text-azul">
+                        {escolhidas.length} / {maxOpcoes}
+                      </p>
+                    </div>
+                    {escolhidas.length === 0 ? (
+                      <p className="px-4 py-5 text-[14.5px] text-texto-3">
+                        Nenhuma creche escolhida. Use a lista abaixo para adicionar.
+                      </p>
+                    ) : (
+                      <ol className="divide-y divide-linha">
+                        {escolhidas.map((codigo, i) => {
+                          const u = porCodigo.get(codigo);
+                          return (
+                            <li key={codigo} className="flex items-center gap-3 px-3 py-3">
+                              <span className="num flex size-8 shrink-0 items-center justify-center rounded bg-azul text-[14px] font-bold text-white">
+                                {i + 1}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[15px] font-bold">{u?.nome ?? codigo}</span>
+                                <span className="block text-[12.5px] text-texto-3">
+                                  {u?.bairro}
+                                  {u && u.distanciaKm !== null ? ` · ${dec(u.distanciaKm)} km` : ""}
+                                  {u ? ` · ${plural(u.vagas, "vaga", "vagas")}` : ""}
+                                </span>
+                              </span>
+                              <span className="flex shrink-0 gap-1">
+                                <BotaoIcone rotulo={`Subir ${u?.nome ?? ""}`} onClick={() => move(i, -1)} desabilitado={i === 0}>
+                                  ↑
+                                </BotaoIcone>
+                                <BotaoIcone
+                                  rotulo={`Descer ${u?.nome ?? ""}`}
+                                  onClick={() => move(i, 1)}
+                                  desabilitado={i === escolhidas.length - 1}
+                                >
+                                  ↓
+                                </BotaoIcone>
+                                <BotaoIcone rotulo={`Remover ${u?.nome ?? ""}`} onClick={() => remove(codigo)}>
+                                  ✕
+                                </BotaoIcone>
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    )}
+                  </div>
+
+                  <label className="block max-w-md">
+                    <span className="rotulo mb-1.5 block">Buscar por nome ou bairro</span>
+                    <input
+                      value={busca}
+                      onChange={(e) => setBusca(e.target.value)}
+                      placeholder="Ex.: Caju, CM Ladeira"
+                      className="campo"
+                    />
+                  </label>
+
+                  <p className="rotulo mt-6 mb-2">
+                    {carregandoUnidades
+                      ? "Carregando creches…"
+                      : `${n(unidades.length)} creches oferecem ${grupamento} · ${horario}`}
+                  </p>
+
+                  <ul className="cartao divide-y divide-linha overflow-hidden">
+                    {filtradas.map((u) => (
+                      <li key={u.codigo} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[15px] font-bold">{u.nome}</span>
+                          <span className="block text-[12.5px] text-texto-3">
+                            {u.bairro}
+                            {u.distanciaKm !== null ? ` · ${dec(u.distanciaKm)} km` : ""}
+                            {u.cre ? ` · CRE ${u.cre}` : ""}
+                          </span>
+                          <span className="mt-1 flex flex-wrap items-center gap-2 text-[13px]">
+                            <span className="num rounded bg-cinza px-1.5 py-0.5 font-medium text-texto-2">
+                              {plural(u.vagas, "vaga", "vagas")}
+                            </span>
+                            <Concorrencia valor={u.concorrencia} />
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => adiciona(u.codigo)}
+                          disabled={escolhidas.length >= maxOpcoes}
+                          className="botao botao-secundario shrink-0 !min-h-0 !px-4 !py-2 !text-[12px] disabled:cursor-not-allowed disabled:border-linha disabled:text-texto-3"
+                        >
+                          Escolher
+                        </button>
+                      </li>
+                    ))}
+                    {!carregandoUnidades && filtradas.length === 0 && (
+                      <li className="px-4 py-5 text-[14.5px] text-texto-3">
+                        Nenhuma creche encontrada para essa busca.
+                      </li>
+                    )}
+                  </ul>
+                </>
+              )}
+            </Secao>
+          )}
+
+          {/* ───────────────────────────── etapa 4 */}
+          {passo === 3 && (
+            <Secao apoio="Marque o que se aplica à família. Só conta na classificação o que for comprovado com documento — na tela final você recebe a lista do que levar.">
+              <div className="cartao mb-5 flex flex-wrap items-center justify-between gap-3 bg-azul-10 px-4 py-3">
+                <span className="rotulo text-azul">Pontuação declarada</span>
+                <span className="num text-[26px] font-black text-azul">
+                  {pontos}
+                  <span className="text-[15px] font-medium text-texto-2"> / {pontuacaoMaxima}</span>
+                </span>
+              </div>
+
+              <ul className="cartao divide-y divide-linha overflow-hidden">
+                {criterios.map((c) => {
+                  const ativo = marcados.includes(c.pergId);
+                  return (
+                    <li key={c.pergId} className={ativo ? "bg-azul-10" : ""}>
+                      <label className="flex cursor-pointer items-start gap-3 px-4 py-3.5">
+                        <input
+                          type="checkbox"
+                          checked={ativo}
+                          onChange={() =>
+                            setMarcados((a) => (ativo ? a.filter((p) => p !== c.pergId) : [...a, c.pergId]))
+                          }
+                          className="mt-0.5 size-5 shrink-0 accent-[#13335a]"
+                        />
+                        <span className="flex-1">
+                          <span className="block text-[15px]">{c.texto}</span>
+                          <span className="mt-1 inline-block rounded bg-cinza px-1.5 py-0.5 text-[11.5px] font-bold tracking-[0.04em] uppercase text-texto-2">
+                            {c.desempate ? "Critério de desempate" : `${c.pontos} ${c.pontos === 1 ? "ponto" : "pontos"}`}
+                          </span>
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <div className="tarja mt-5 border-l-atencao bg-atencao-fundo">
+                <p className="rotulo mb-1 text-atencao">Atenção à comprovação</p>
+                <p className="text-[14.5px] text-texto-2">
+                  Em 2025, 68,2% das inscrições declararam ao menos um critério e apenas 6,2% chegaram à
+                  classificação com pontuação acima de zero. A diferença não é fraude: é família que não
+                  conseguiu comparecer para comprovar. Quem não comprova entra empatado em zero com 93,8% da
+                  fila.
+                </p>
+              </div>
+            </Secao>
+          )}
+
+          {/* ───────────────────────────── etapa 5 */}
+          {passo === 4 && (
+            <Secao apoio="Revise os dados antes de enviar. É possível voltar e alterar qualquer resposta.">
+              <dl className="cartao divide-y divide-linha overflow-hidden">
+                <Item rotulo="Grupamento">{grupamento ?? "—"}</Item>
+                <Item rotulo="Horário">{horario || "—"}</Item>
+                <Item rotulo="Bairro">{bairro || "não informado"}</Item>
+                <Item rotulo="Pontuação declarada">
+                  <span className="num">
+                    {pontos} de {pontuacaoMaxima}
+                  </span>
+                </Item>
+                <Item rotulo="Creches escolhidas">
+                  <ol className="space-y-1">
+                    {escolhidas.map((c, i) => (
+                      <li key={c} className="flex gap-2">
+                        <span className="num font-bold text-azul">{i + 1}.</span>
+                        <span>{porCodigo.get(c)?.nome ?? c}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </Item>
+              </dl>
+
+              {erros.length > 0 && (
+                <div className="tarja mt-5 border-l-erro bg-erro-fundo" role="alert">
+                  <p className="rotulo mb-1 text-erro">Não foi possível enviar</p>
+                  <ul className="list-inside list-disc text-[14.5px]">
+                    {erros.map((e) => (
+                      <li key={e}>{e}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={enviar}
+                disabled={enviando || escolhidas.length === 0}
+                className="botao botao-primario mt-6 w-full disabled:cursor-not-allowed disabled:border-linha-forte disabled:bg-linha-forte"
+              >
+                {enviando ? "Processando a classificação…" : "Enviar inscrição"}
+              </button>
+              <p className="mt-2.5 text-center text-[13px] text-texto-3">
+                A classificação é executada na hora, sobre a fila real do processo de 2025.
+              </p>
+            </Secao>
+          )}
+        </div>
+
+        {/* ───────────────────────────── navegação */}
+        <div className="flex items-center justify-between gap-3 border-t border-linha bg-cinza px-5 py-4">
           <button
             type="button"
-            onClick={() => setPasso((p) => Math.min(PASSOS.length - 1, p + 1))}
-            disabled={!podeAvancar}
-            className="border border-ink bg-ink px-6 py-3 font-mono text-[12px] tracking-wide text-surface disabled:cursor-not-allowed disabled:border-rule disabled:bg-rule"
+            onClick={() => setPasso((p) => Math.max(0, p - 1))}
+            disabled={passo === 0}
+            className="botao botao-secundario !min-h-0 !px-5 !py-2.5 !text-[12px] disabled:cursor-not-allowed disabled:border-linha disabled:text-texto-3"
           >
-            continuar →
+            Voltar
           </button>
-        )}
+          {passo < PASSOS.length - 1 && (
+            <button
+              type="button"
+              onClick={() => setPasso((p) => Math.min(PASSOS.length - 1, p + 1))}
+              disabled={!podeAvancar}
+              className="botao botao-primario !min-h-0 !px-6 !py-2.5 !text-[12px] disabled:cursor-not-allowed disabled:border-linha-forte disabled:bg-linha-forte"
+            >
+              Continuar
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
+const dec = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+
 // ────────────────────────────────────────────────────────── subcomponentes
 
 function Trilha({ passo }: { passo: number }) {
   return (
-    <ol className="mb-9 flex flex-wrap gap-x-4 gap-y-1">
-      {PASSOS.map((p, i) => (
-        <li key={p} className="flex items-center gap-2">
-          <span
-            className={`num flex size-6 items-center justify-center text-[11px] font-semibold ${
-              i === passo ? "bg-ink text-surface" : i < passo ? "bg-match text-surface" : "bg-rule text-ink-2"
-            }`}
-          >
-            {i < passo ? "✓" : i + 1}
-          </span>
-          <span className={`text-[12.5px] ${i === passo ? "font-semibold" : "text-ink-3"}`}>{p}</span>
-        </li>
-      ))}
-    </ol>
+    <nav aria-label="Etapas da inscrição">
+      <ol className="flex flex-wrap gap-x-1 gap-y-2">
+        {PASSOS.map((p, i) => {
+          const estado = i === passo ? "atual" : i < passo ? "feito" : "futuro";
+          return (
+            <li key={p} className="flex items-center gap-2">
+              <span
+                className={`num flex size-7 shrink-0 items-center justify-center rounded-full text-[12px] font-bold ${
+                  estado === "atual"
+                    ? "bg-azul text-white"
+                    : estado === "feito"
+                      ? "bg-ok text-white"
+                      : "bg-white text-texto-3 ring-1 ring-linha-forte"
+                }`}
+                aria-current={estado === "atual" ? "step" : undefined}
+              >
+                {estado === "feito" ? "✓" : i + 1}
+              </span>
+              <span
+                className={`text-[12.5px] ${estado === "atual" ? "font-bold text-azul" : "text-texto-3"}`}
+              >
+                {p}
+              </span>
+              {i < PASSOS.length - 1 && <span aria-hidden className="mx-1.5 h-px w-4 bg-linha-forte" />}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
   );
 }
 
-function Secao({ titulo, apoio, children }: { titulo: string; apoio: string; children: React.ReactNode }) {
+function Secao({ apoio, children }: { apoio: string; children: React.ReactNode }) {
   return (
-    <section>
-      <h1 className="subtitulo mb-2 text-[30px]">{titulo}</h1>
-      <p className="mb-7 max-w-[58ch] text-[15.5px] text-ink-2">{apoio}</p>
+    <div>
+      <p className="mb-6 max-w-[68ch] text-[15px] text-texto-2">{apoio}</p>
       {children}
-    </section>
+    </div>
   );
 }
 
-function Linha({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
+function Item({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap gap-x-6 gap-y-1 px-4 py-3">
-      <dt className="rotulo min-w-[150px] pt-1">{rotulo}</dt>
+      <dt className="rotulo min-w-[160px] pt-1">{rotulo}</dt>
       <dd className="flex-1 text-[15px]">{children}</dd>
     </div>
+  );
+}
+
+/** Concorrência com cor funcional, não decorativa: orienta a escolha. */
+function Concorrencia({ valor }: { valor: number }) {
+  const alta = valor > 6;
+  const media = valor > 3;
+  const cor = alta
+    ? "bg-erro-fundo text-erro"
+    : media
+      ? "bg-atencao-fundo text-atencao"
+      : "bg-ok-fundo text-ok";
+  return (
+    <span className={`num rounded px-1.5 py-0.5 font-medium ${cor}`}>
+      {dec(valor)} candidatos por vaga em 2025
+    </span>
   );
 }
 
@@ -618,7 +657,7 @@ function BotaoIcone({
       onClick={onClick}
       disabled={desabilitado}
       aria-label={rotulo}
-      className="size-9 border border-rule text-[13px] transition hover:border-ink disabled:opacity-30"
+      className="size-10 rounded border border-linha-forte bg-white text-[14px] text-azul transition hover:border-azul hover:bg-azul-10 disabled:opacity-30 disabled:hover:bg-white"
     >
       {children}
     </button>
@@ -640,81 +679,92 @@ function Resultado({
   const c = resumo.convite;
 
   return (
-    <div className="mx-auto max-w-3xl px-5 py-10">
-      <p className="eyebrow mb-3">Inscrição registrada</p>
-      <h1 className="titulo mb-2 text-[clamp(28px,6vw,44px)]">
-        {c ? "Você tem uma vaga." : "Você está na fila."}
+    <div className="mx-auto max-w-4xl px-5 py-9">
+      <p className="rotulo mb-2 text-azul-medio">Inscrição registrada</p>
+      <h1 className="mb-3 text-[clamp(24px,4.2vw,34px)] font-black tracking-[-0.025em] text-azul">
+        {c ? "Vaga reservada para a sua criança." : "Inscrição na fila de espera."}
       </h1>
-      <p className="mb-8 max-w-[60ch] text-[16.5px] text-ink-2">{resumo.explicacao}</p>
+      <p className="mb-7 max-w-[66ch] text-[16px] text-texto-2">{resumo.explicacao}</p>
 
-      <div className="mb-8 border border-rule bg-white">
-        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-rule px-5 py-4">
-          <span className="rotulo">Protocolo</span>
-          <span className="num font-display text-[22px] font-extrabold tracking-tight">{resumo.protocolo}</span>
+      {/* ── comprovante ── */}
+      <div className="cartao mb-6 overflow-hidden">
+        <p className="cartao-titulo">Comprovante de inscrição</p>
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-linha bg-azul-10 px-4 py-3.5">
+          <span className="rotulo text-azul">Número do protocolo</span>
+          <span className="num font-mono text-[20px] font-medium text-azul">{resumo.protocolo}</span>
         </div>
-        <dl className="divide-y divide-rule">
-          <Linha rotulo="Pontuação">
-            {resumo.pontos} de {resumo.pontuacaoMaxima}
+        <dl className="divide-y divide-linha">
+          <Item rotulo="Pontuação">
+            <span className="num">
+              {resumo.pontos} de {resumo.pontuacaoMaxima}
+            </span>
             {resumo.empatadaEmZero && (
-              <span className="ml-2 text-[13.5px] text-ink-3">
-                — empatada com 93,8% da fila; o desempate é o sorteio publicado
+              <span className="mt-1 block text-[13.5px] text-texto-3">
+                Empatada com 93,8% da fila. O desempate é o sorteio de semente publicada.
               </span>
             )}
-          </Linha>
-          <Linha rotulo="Rodada">
-            <span className="num text-[13.5px]">{resumo.rodadaId}</span>
-          </Linha>
-          <Linha rotulo="Fila do processo">
-            {resumo.totalCandidatos.toLocaleString("pt-BR")} crianças classificadas
-          </Linha>
-          <Linha rotulo="Classificação incremental">
-            {resumo.propostasAvaliadas} {resumo.propostasAvaliadas === 1 ? "proposta" : "propostas"} avaliadas em{" "}
-            {resumo.duracaoMs.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} ms
+          </Item>
+          <Item rotulo="Identificador da rodada">
+            <span className="num font-mono text-[13px]">{resumo.rodadaId}</span>
+          </Item>
+          <Item rotulo="Fila do processo">
+            <span className="num">{n(resumo.totalCandidatos)}</span> crianças classificadas
+          </Item>
+          <Item rotulo="Classificação incremental">
+            <span className="num">
+              {resumo.propostasAvaliadas} {resumo.propostasAvaliadas === 1 ? "proposta" : "propostas"} avaliadas
+              em {dec(resumo.duracaoMs)} ms
+            </span>
             {resumo.remanejadas > 0 && (
-              <span className="mt-1 block text-[13.5px] text-ink-3">
-                {resumo.remanejadas}{" "}
-                {resumo.remanejadas === 1 ? "criança foi remanejada" : "crianças foram remanejadas"} para a
-                opção seguinte delas — nenhuma perdeu a vaga, e nenhuma à frente na fila foi ultrapassada.
+              <span className="mt-1 block text-[13.5px] text-texto-3">
+                {resumo.remanejadas} {resumo.remanejadas === 1 ? "criança foi remanejada" : "crianças foram remanejadas"}{" "}
+                para a opção seguinte delas. Nenhuma perdeu a vaga, e nenhuma à frente na fila foi
+                ultrapassada.
               </span>
             )}
-          </Linha>
+          </Item>
         </dl>
       </div>
 
+      {/* ── convite ── */}
       {c && (
-        <div className="mb-8 border-l-[3px] border-match bg-match-soft px-5 py-4">
-          <p className="rotulo mb-1">Convite · {c.ordemPreferencia}ª opção</p>
-          <p className="font-display text-[21px] font-bold">{c.unidade?.nome ?? c.assento}</p>
-          <p className="mt-1 text-[14.5px] text-ink-2">
-            {c.unidade?.bairro} · {c.grupamento} · {c.horario} · {plural(c.capacidade, "vaga", "vagas")} no assento
-          </p>
-          <p className="mt-3 text-[14px]">
-            Um convite, não cinco. As outras opções não ficam com assento reservado no seu nome.
-          </p>
+        <div className="cartao mb-6 overflow-hidden border-ok">
+          <p className="cartao-titulo bg-ok">Convite emitido · {c.ordemPreferencia}ª opção</p>
+          <div className="p-4">
+            <p className="text-[19px] font-bold text-azul">{c.unidade?.nome ?? c.assento}</p>
+            <p className="mt-1 text-[14.5px] text-texto-2">
+              {c.unidade?.bairro} · {c.grupamento} · {c.horario} · {plural(c.capacidade, "vaga", "vagas")} no
+              assento
+            </p>
+            <p className="mt-3 border-t border-linha pt-3 text-[14.5px] text-texto-2">
+              Um convite, não cinco. As outras opções não ficam com assento reservado neste nome.
+            </p>
+          </div>
         </div>
       )}
 
+      {/* ── fila de melhoria ── */}
       {resumo.filaDeMelhoria.length > 0 && (
-        <section className="mb-8">
-          <h2 className="subtitulo mb-2 text-[20px]">Fila de melhoria</h2>
-          <p className="mb-3 max-w-[60ch] text-[14.5px] text-ink-2">
+        <section className="mb-6">
+          <h2 className="secao-titulo mb-2">Fila de melhoria</h2>
+          <p className="mb-3 max-w-[66ch] text-[14.5px] text-texto-2">
             {c
-              ? "Suas opções melhores continuam valendo. Se abrir vaga em alguma delas, o remanejamento é automático e a vaga atual entra em cascata para a próxima criança. A matrícula é piso, não teto."
-              : "Estas são as vagas que você disputa. A posição é recalculada a cada vaga liberada na rede."}
+              ? "As opções melhores continuam valendo. Se abrir vaga em alguma delas, o remanejamento é automático e a vaga atual entra em cascata para a próxima criança. A matrícula é piso, não teto."
+              : "Estas são as vagas em disputa. A posição é recalculada a cada vaga liberada na rede."}
           </p>
-          <ul className="divide-y divide-rule border border-rule bg-white">
+          <ul className="cartao divide-y divide-linha overflow-hidden">
             {resumo.filaDeMelhoria.map((p) => (
-              <li key={p.assento} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3">
-                <span className="num flex size-7 shrink-0 items-center justify-center bg-signal-soft text-[13px] font-semibold">
+              <li key={p.assento} className="flex items-baseline gap-3 px-4 py-3">
+                <span className="num flex size-8 shrink-0 items-center justify-center rounded bg-cinza text-[14px] font-bold text-azul">
                   {p.ordemPreferencia}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block font-display text-[15px] font-semibold">
+                  <span className="block text-[15px] font-bold">
                     {p.unidade?.nome ?? porCodigo.get(Number(p.assento.split("|")[0]))?.nome ?? p.assento}
                   </span>
-                  <span className="rotulo">
-                    {plural(p.capacidade, "vaga", "vagas")} · {p.concorrentes.toLocaleString("pt-BR")} disputando ·{" "}
-                    {p.aFrente.toLocaleString("pt-BR")} com prioridade maior
+                  <span className="num block text-[12.5px] text-texto-3">
+                    {plural(p.capacidade, "vaga", "vagas")} · {n(p.concorrentes)} disputando ·{" "}
+                    {n(p.aFrente)} com prioridade maior
                   </span>
                 </span>
               </li>
@@ -723,21 +773,24 @@ function Resultado({
         </section>
       )}
 
+      {/* ── comprovantes ── */}
       {comprovantes.length > 0 && (
-        <section className="mb-8">
-          <h2 className="subtitulo mb-2 text-[20px]">O que levar para comprovar</h2>
-          <p className="mb-3 max-w-[60ch] text-[14.5px] text-ink-2">
+        <section className="mb-7">
+          <h2 className="secao-titulo mb-2">Documentos a apresentar</h2>
+          <p className="mb-3 max-w-[66ch] text-[14.5px] text-texto-2">
             Sem estes documentos, a pontuação declarada não entra na classificação. É aqui que a rede perdeu
             62 pontos percentuais em 2025.
           </p>
-          <ul className="divide-y divide-rule border border-rule bg-white">
+          <ul className="cartao divide-y divide-linha overflow-hidden">
             {comprovantes.map((doc) => (
-              <li key={doc.pergId} className="px-4 py-4">
-                <p className="rotulo mb-1">
-                  {doc.desempate ? "desempate" : `${doc.pontos} ${doc.pontos === 1 ? "ponto" : "pontos"}`}
-                </p>
-                <p className="mb-1 text-[14.5px] font-semibold">{doc.texto}</p>
-                <p className="text-[14px] text-ink-2">{doc.documento}</p>
+              <li key={doc.pergId} className="px-4 py-3.5">
+                <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                  <span className="rounded bg-azul px-1.5 py-0.5 text-[11px] font-bold tracking-[0.04em] uppercase text-white">
+                    {doc.desempate ? "Desempate" : `${doc.pontos} ${doc.pontos === 1 ? "ponto" : "pontos"}`}
+                  </span>
+                  <span className="text-[14.5px] font-bold">{doc.texto}</span>
+                </div>
+                <p className="text-[14px] text-texto-2">{doc.documento}</p>
               </li>
             ))}
           </ul>
@@ -745,18 +798,11 @@ function Resultado({
       )}
 
       <div className="flex flex-wrap gap-3">
-        <Link
-          href="/acompanhar"
-          className="border border-ink bg-ink px-6 py-3 font-mono text-[12px] tracking-wide text-surface"
-        >
-          acompanhar inscrição
+        <Link href="/acompanhar" className="botao botao-primario">
+          Acompanhar inscrição
         </Link>
-        <button
-          type="button"
-          onClick={onNova}
-          className="border border-rule px-6 py-3 font-mono text-[12px] tracking-wide"
-        >
-          fazer outra simulação
+        <button type="button" onClick={onNova} className="botao botao-secundario">
+          Nova simulação
         </button>
       </div>
     </div>

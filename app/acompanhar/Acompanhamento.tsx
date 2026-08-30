@@ -40,6 +40,7 @@ interface Guardada {
 
 const CHAVE_LOCAL = "vaga-certa:inscricao";
 const n = (v: number) => v.toLocaleString("pt-BR");
+const dec = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 
 export default function Acompanhamento() {
   const [estado, setEstado] = useState<"carregando" | "sem-inscricao" | "pronto" | "erro">("carregando");
@@ -96,32 +97,37 @@ export default function Acompanhamento() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-5 py-12">
-      <p className="eyebrow mb-3">Acompanhar inscrição</p>
+    <div className="mx-auto max-w-4xl px-5 py-9">
+      <p className="rotulo mb-2 text-azul-medio">Consulta de inscrição</p>
 
       {estado === "carregando" && (
         <>
-          <h1 className="titulo mb-3 text-[clamp(28px,6vw,44px)]">Consultando a fila…</h1>
-          <p className="text-[16px] text-ink-2">Recalculando a rodada com a fila real de 2025.</p>
+          <h1 className="mb-3 text-[clamp(24px,4.2vw,32px)] font-black tracking-[-0.025em] text-azul">
+            Consultando a fila…
+          </h1>
+          <p className="text-[16px] text-texto-2">
+            Recalculando a classificação sobre a fila real do processo de 2025.
+          </p>
         </>
       )}
 
       {estado === "sem-inscricao" && (
         <>
-          <h1 className="titulo mb-4 text-[clamp(28px,6vw,44px)]">Nenhuma inscrição neste navegador.</h1>
-          <p className="mb-4 max-w-[60ch] text-[16.5px] text-ink-2">
-            Este protótipo não mantém banco de dados: a inscrição fica guardada no seu próprio navegador e é
-            reenviada ao motor para recalcular a posição. Como a rodada é determinística, a mesma inscrição
-            devolve sempre o mesmo resultado.
-          </p>
-          <p className="mb-8 max-w-[60ch] text-[15px] text-ink-3">
-            Em produção, a consulta seria pelo protocolo e pelo CPF do responsável, contra o registro da
-            inscrição — sem depender do navegador.
-          </p>
-          <Link
-            href="/inscricao"
-            className="inline-block bg-ink px-7 py-4 font-display text-[16px] font-semibold text-surface"
-          >
+          <h1 className="mb-4 text-[clamp(24px,4.2vw,32px)] font-black tracking-[-0.025em] text-azul">
+            Nenhuma inscrição neste navegador.
+          </h1>
+          <div className="tarja mb-6 max-w-[66ch]">
+            <p className="mb-3 text-[15.5px] text-texto-2">
+              Este protótipo não mantém banco de dados: a inscrição fica guardada no próprio navegador e é
+              reenviada ao motor para recalcular a posição. Como a rodada é determinística, a mesma inscrição
+              devolve sempre o mesmo resultado.
+            </p>
+            <p className="text-[14.5px] text-texto-3">
+              Em produção, a consulta seria pelo protocolo e pelo CPF do responsável, contra o registro da
+              inscrição — sem depender do navegador.
+            </p>
+          </div>
+          <Link href="/inscricao" className="botao botao-primario">
             Fazer a inscrição
           </Link>
         </>
@@ -129,76 +135,85 @@ export default function Acompanhamento() {
 
       {estado === "erro" && (
         <>
-          <h1 className="titulo mb-4 text-[clamp(28px,6vw,44px)]">Não deu para consultar.</h1>
-          <div className="mb-6 border-l-[3px] border-break bg-break-soft px-4 py-3" role="alert">
+          <h1 className="mb-4 text-[clamp(24px,4.2vw,32px)] font-black tracking-[-0.025em] text-azul">
+            Não foi possível consultar.
+          </h1>
+          <div className="tarja mb-6 border-l-erro bg-erro-fundo" role="alert">
             <p className="text-[15px]">{erro}</p>
           </div>
-          <button type="button" onClick={limpar} className="border border-rule px-6 py-3 font-mono text-[12px]">
-            limpar e começar de novo
+          <button type="button" onClick={limpar} className="botao botao-secundario">
+            Limpar e começar de novo
           </button>
         </>
       )}
 
       {estado === "pronto" && resumo && (
         <>
-          <h1 className="titulo mb-3 text-[clamp(28px,6vw,44px)]">
-            {resumo.convite ? "Você tem uma vaga." : "Você está na fila."}
+          <h1 className="mb-3 text-[clamp(24px,4.2vw,32px)] font-black tracking-[-0.025em] text-azul">
+            {resumo.convite ? "Vaga reservada para a sua criança." : "Inscrição na fila de espera."}
           </h1>
-          <p className="mb-8 max-w-[60ch] text-[16.5px] text-ink-2">{resumo.explicacao}</p>
+          <p className="mb-7 max-w-[66ch] text-[16px] text-texto-2">{resumo.explicacao}</p>
 
-          <div className="mb-8 border border-rule bg-surface">
-            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-rule px-5 py-4">
-              <span className="rotulo">Protocolo</span>
-              <span className="num font-display text-[22px] font-extrabold">{resumo.protocolo}</span>
+          <div className="cartao mb-6 overflow-hidden">
+            <p className="cartao-titulo">Situação da inscrição</p>
+            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-linha bg-azul-10 px-4 py-3.5">
+              <span className="rotulo text-azul">Número do protocolo</span>
+              <span className="num font-mono text-[20px] font-medium text-azul">{resumo.protocolo}</span>
             </div>
-            <dl className="divide-y divide-rule">
-              <Linha rotulo="Pontuação">
-                {resumo.pontos} de {resumo.pontuacaoMaxima}
+            <dl className="divide-y divide-linha">
+              <Item rotulo="Pontuação">
+                <span className="num">
+                  {resumo.pontos} de {resumo.pontuacaoMaxima}
+                </span>
                 {resumo.empatadaEmZero && (
-                  <span className="ml-2 text-[13.5px] text-ink-3">— empatada com 93,8% da fila</span>
+                  <span className="mt-1 block text-[13.5px] text-texto-3">
+                    Empatada com 93,8% da fila.
+                  </span>
                 )}
-              </Linha>
-              <Linha rotulo="Rodada">
-                <span className="num text-[13.5px]">{resumo.rodadaId}</span>
-              </Linha>
-              <Linha rotulo="Recalculada agora">
-                {n(resumo.totalCandidatos)} crianças na fila ·{" "}
-                {resumo.duracaoMs.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} ms
-              </Linha>
+              </Item>
+              <Item rotulo="Identificador da rodada">
+                <span className="num font-mono text-[13px]">{resumo.rodadaId}</span>
+              </Item>
+              <Item rotulo="Recalculada agora">
+                <span className="num">{n(resumo.totalCandidatos)}</span> crianças na fila ·{" "}
+                <span className="num">{dec(resumo.duracaoMs)} ms</span>
+              </Item>
             </dl>
           </div>
 
           {resumo.convite && (
-            <div className="mb-8 border-l-[3px] border-match bg-match-soft px-5 py-4">
-              <p className="rotulo mb-1">Convite · {resumo.convite.ordemPreferencia}ª opção</p>
-              <p className="font-display text-[21px] font-bold">
-                {resumo.convite.unidade?.nome ?? resumo.convite.assento}
+            <div className="cartao mb-6 overflow-hidden border-ok">
+              <p className="cartao-titulo bg-ok">
+                Convite emitido · {resumo.convite.ordemPreferencia}ª opção
               </p>
-              <p className="mt-1 text-[14.5px] text-ink-2">
-                {resumo.convite.unidade?.bairro} · {resumo.convite.grupamento} · {resumo.convite.horario}
-              </p>
+              <div className="p-4">
+                <p className="text-[19px] font-bold text-azul">
+                  {resumo.convite.unidade?.nome ?? resumo.convite.assento}
+                </p>
+                <p className="mt-1 text-[14.5px] text-texto-2">
+                  {resumo.convite.unidade?.bairro} · {resumo.convite.grupamento} · {resumo.convite.horario}
+                </p>
+              </div>
             </div>
           )}
 
           {resumo.filaDeMelhoria.length > 0 && (
-            <section className="mb-8">
-              <h2 className="subtitulo mb-2 text-[20px]">Fila de melhoria</h2>
-              <p className="mb-3 max-w-[60ch] text-[14.5px] text-ink-2">
+            <section className="mb-7">
+              <h2 className="secao-titulo mb-2">Fila de melhoria</h2>
+              <p className="mb-3 max-w-[66ch] text-[14.5px] text-texto-2">
                 {resumo.convite
-                  ? "Suas opções melhores continuam valendo. Se abrir vaga, o remanejamento é automático e a vaga atual passa para a próxima criança."
-                  : "Estas são as vagas que você disputa, recalculadas a cada vaga liberada na rede."}
+                  ? "As opções melhores continuam valendo. Se abrir vaga, o remanejamento é automático e a vaga atual passa para a próxima criança."
+                  : "Estas são as vagas em disputa, recalculadas a cada vaga liberada na rede."}
               </p>
-              <ul className="divide-y divide-rule border border-rule bg-surface">
+              <ul className="cartao divide-y divide-linha overflow-hidden">
                 {resumo.filaDeMelhoria.map((p) => (
                   <li key={p.assento} className="flex items-baseline gap-3 px-4 py-3">
-                    <span className="num flex size-7 shrink-0 items-center justify-center bg-signal-soft text-[13px] font-semibold">
+                    <span className="num flex size-8 shrink-0 items-center justify-center rounded bg-cinza text-[14px] font-bold text-azul">
                       {p.ordemPreferencia}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block font-display text-[15px] font-semibold">
-                        {p.unidade?.nome ?? p.assento}
-                      </span>
-                      <span className="rotulo">
+                      <span className="block text-[15px] font-bold">{p.unidade?.nome ?? p.assento}</span>
+                      <span className="num block text-[12.5px] text-texto-3">
                         {p.capacidade} vagas · {n(p.concorrentes)} disputando · {n(p.aFrente)} com prioridade
                         maior
                       </span>
@@ -209,8 +224,8 @@ export default function Acompanhamento() {
             </section>
           )}
 
-          <button type="button" onClick={limpar} className="border border-rule px-6 py-3 font-mono text-[12px]">
-            esquecer esta inscrição
+          <button type="button" onClick={limpar} className="botao botao-secundario">
+            Esquecer esta inscrição
           </button>
         </>
       )}
@@ -218,10 +233,10 @@ export default function Acompanhamento() {
   );
 }
 
-function Linha({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
+function Item({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap gap-x-6 gap-y-1 px-5 py-3">
-      <dt className="rotulo min-w-[150px] pt-1">{rotulo}</dt>
+    <div className="flex flex-wrap gap-x-6 gap-y-1 px-4 py-3">
+      <dt className="rotulo min-w-[160px] pt-1">{rotulo}</dt>
       <dd className="flex-1 text-[15px]">{children}</dd>
     </div>
   );

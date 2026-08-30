@@ -183,6 +183,40 @@ Escolhas de produto que valem menção:
 - Alvos grandes, foco sempre visível, `skip link`, `aria-pressed` nos botões de escolha e contraste
   alto: o formulário é o caminho de uma família em pé numa fila, muitas vezes no celular.
 
+## Identidade visual
+
+A interface segue o [Manual de Marca Prefeitura Rio 2025](https://educacao.prefeitura.rio/wp-content/uploads/sites/42/2025/01/MANUAL-DE-MARCA-PREFEITURA-RIO-2025.pdf),
+publicado pela própria SME em [educacao.prefeitura.rio/identidade-visual](https://educacao.prefeitura.rio/identidade-visual/).
+O manual define cinco cores, e são exatamente essas as usadas:
+
+| Cor | Uso aqui |
+|---|---|
+| `#13335a` azul institucional | assinatura, cabeçalhos de tabela e de cartão, botão primário |
+| `#eceded` cinza | fundo de seção alternada |
+| `#2a688f` azul médio | rótulos de apoio |
+| `#42b9eb` azul claro | filete de seção, borda superior de cartão, texto sobre azul escuro |
+| `#f06949` coral | **não usado** — o manual restringe o degradê quente a filme publicitário |
+
+A estrutura de página reproduz o padrão observável no [matricula.rio](https://matricula.rio) e no
+[portal da SME](https://educacao.prefeitura.rio): barra utilitária ligando ao `prefeitura.rio`,
+assinatura institucional em duas linhas (órgão superior + secretaria), navegação em versal, conteúdo
+em cartões sobre fundo claro, e rodapé com endereço e serviços relacionados.
+
+Três decisões que valem registro:
+
+- **Tipografia.** A fonte oficial é **Cera Pro**, distribuída pela SME para uso próprio. É fonte
+  comercial: embuti-la num app público seria redistribuição indevida. Usamos **DM Sans**, o
+  substituto livre mais próximo em estrutura — geométrica, contraste baixo, `a` de dois andares,
+  altura-x alta. A troca está declarada no rodapé do site.
+- **Caixa alta.** O manual pede título preferencialmente em CAIXA ALTA. Aplicamos isso em rótulos,
+  navegação, botões e cabeçalhos de tabela, mas **não** em títulos longos: texto extenso em versal
+  prejudica leitura e leitores de tela. É o que o próprio portal da SME faz na prática.
+- **Contraste.** Todas as combinações de texto passam WCAG AA. Duas correções foram necessárias:
+  `#42b9eb` tem 2,24:1 sobre branco e por isso nunca é texto sobre fundo claro (só sobre o azul
+  escuro, onde dá 5,68:1); e o cinza de rótulo foi escurecido de `#6b7a8c` para `#5a6877`, porque a
+  1,5 pt de tamanho ele ficava em 4,39:1 sobre branco e 3,74:1 sobre `#eceded` — abaixo do mínimo.
+  Com o novo valor: 5,70:1, 4,86:1 e 5,26:1 nos três fundos do site.
+
 ## Arquitetura
 
 ```
