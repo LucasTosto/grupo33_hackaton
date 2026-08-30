@@ -24,6 +24,8 @@ interface Resumo {
   rodadaId: string;
   duracaoMs: number;
   totalCandidatos: number;
+  remanejadas: number;
+  propostasAvaliadas: number;
   explicacao: string;
 }
 
@@ -160,7 +162,8 @@ export default function Acompanhamento() {
                 <span className="num text-[13.5px]">{resumo.rodadaId}</span>
               </Linha>
               <Linha rotulo="Recalculada agora">
-                {n(resumo.totalCandidatos)} crianças em {resumo.duracaoMs} ms
+                {n(resumo.totalCandidatos)} crianças na fila ·{" "}
+                {resumo.duracaoMs.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} ms
               </Linha>
             </dl>
           </div>

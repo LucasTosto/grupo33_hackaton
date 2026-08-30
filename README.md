@@ -138,6 +138,25 @@ Uma desistência, cinco crianças em opção melhor, em 188 ms. Hoje esse mesmo 
 físico, em série, a três dias úteis por convite. **É aqui que os dias mortos moram** — e a cadeia
 preserva a estabilidade, o que é verificado em teste sobre instância aleatória.
 
+### Inscrição nova também é incremental
+
+Uma inscrição que chega em março não deve requalificar as 62.899 crianças já classificadas. A criança
+propõe à 1ª opção; se está cheia, disputa com o ocupante de menor prioridade; se passa, entra, e o
+deslocado retoma a proposta a partir da opção seguinte à que perdeu — exatamente o que a aceitação
+diferida faria.
+
+O resultado é **idêntico** a rodar a rodada inteira com a nova criança na entrada. Isso não é uma
+suposição: há teste que compara as duas saídas candidato por candidato, para quatro perfis de
+inscrição, sobre instância de 600 candidatos. O custo cai de segundos para milissegundos:
+
+| | rodada completa | inserção incremental |
+|---|---:|---:|
+| propostas avaliadas | 94.387 | **1 a 4** |
+| tempo de resposta | ~3.800 ms | **~190 ms** |
+
+O formulário ainda chama um `GET /api/inscricao` quando a família chega no passo das creches, para
+aquecer a instância — sem isso o primeiro envio paga a decodificação da fila mais a rodada base.
+
 ### A criança, não a inscrição
 
 A chave de uma inscrição na base é `(polo, inscrição)`, e **a mesma criança pode estar inscrita em
@@ -175,6 +194,7 @@ app/                     Next.js 16 · App Router
   api/unidades/          creches por assento, ordenadas por distância
   api/inscricao/         valida, roda a classificação, devolve convite + comprovantes
   api/cascata/           simula uma vaga liberada e devolve a cadeia de remanejamento
+                         (GET /api/inscricao aquece o motor antes do envio)
 
 lib/
   engine/index.ts        MOTOR — arquivo único, zero dependências
@@ -188,7 +208,7 @@ scripts/
   capacidade_real.py     capacidade = o que a rede de fato matriculou em 2025
   backtest.ts            motor × processo real → lib/data/backtest.json
 
-test/engine.test.ts      25 testes, sem transpilador (type-stripping do Node 24)
+test/engine.test.ts      31 testes, sem transpilador (type-stripping do Node 24)
 ```
 
 Decisões que sustentam o resto:
@@ -211,7 +231,7 @@ Decisões que sustentam o resto:
 ```bash
 npm install
 npm run dev              # http://localhost:3000
-npm test                 # 25 testes do motor
+npm test                 # 31 testes do motor
 npm run build
 ```
 
@@ -236,7 +256,7 @@ Claude Opus 5 conduziu o trabalho de ponta a ponta dentro do Claude Code, em uma
 2. **Escreveu os extratores em Python** sobre 837 mil linhas da Query A e 4,36 milhões da Query B,
    com leitura em blocos, e reproduziu de forma independente os números que tínhamos levantado à mão
    (93,8% empatados em zero, 6,2% de comprovação).
-3. **Implementou o motor e os 25 testes**, incluindo a verificação adversarial de estabilidade — que
+3. **Implementou o motor e os 31 testes**, incluindo a verificação adversarial de estabilidade — que
    é o que pegou dois bugs reais: alocação por inscrição em vez de por criança, e a criança que
    desistia retomando o próprio assento na cascata por não ter sido removida do processo.
 4. **Construiu a aplicação inteira** e o backtest que gera a tabela deste README.

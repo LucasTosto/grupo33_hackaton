@@ -19,6 +19,7 @@ import {
   assentoId,
   cascataDeVaga,
   decodificaAssento,
+  inserirCandidato,
   verificarEstabilidade,
   type Assento,
   type AssentoId,
@@ -225,22 +226,20 @@ export interface RodadaCompleta {
 }
 
 /**
- * Cada rodada guardada carrega ~48 mil alocações. Segurar muitas estoura a
- * memória de uma instância pequena, então o teto é baixo de propósito: a rodada
- * base é a que se repete, as demais são de uma inscrição só.
+ * A rodada base do processo de 2025, calculada uma vez por instância.
+ *
+ * Uma inscrição nova não gera outra rodada: ela é inserida de forma incremental
+ * sobre esta (ver `resumoDaInscricao`), o que dá o mesmo resultado e custa
+ * milissegundos. Guardar uma rodada só também mantém a memória previsível —
+ * cada uma carrega ~48 mil alocações.
  */
-const cache = new Map<string, RodadaCompleta>();
-const TETO_CACHE = 4;
+let _rodadaBase: RodadaCompleta | null = null;
 
-/** Roda o processo com a fila real de 2025 mais as inscrições vivas passadas. */
-export function rodada(vivas: InscricaoViva[] = []): RodadaCompleta {
-  const chave = vivas.map((v) => v.protocolo).sort().join("+") || "base";
-  const guardada = cache.get(chave);
-  if (guardada) return guardada;
+export function rodada(): RodadaCompleta {
+  if (_rodadaBase) return _rodadaBase;
 
-  const candidatos = [...filaHistorica(), ...vivas.map(candidatoDeInscricao)];
   const parametros: ParametrosRodada = {
-    candidatos,
+    candidatos: filaHistorica(),
     assentos: assentosDaRede(),
     semente: SEMENTE,
     catalogoVersao: catalogo.versao,
@@ -251,22 +250,12 @@ export function rodada(vivas: InscricaoViva[] = []): RodadaCompleta {
   const resultado = alocar(parametros);
   const duracaoMs = Math.round(performance.now() - t0);
 
-  // A verificação de estabilidade é O(Σ|pref| · capacidade) e roda em segundos na
-  // rede inteira, então acompanha a rodada base. Para rodadas com inscrição viva
-  // o resultado é o mesmo objeto de garantia, já conferido na base.
-  const violacoes = chave === "base" ? verificarEstabilidade(parametros, resultado) : cache.get("base")?.violacoes ?? [];
+  // A verificação de estabilidade acompanha a rodada, não fica só nos testes: é
+  // a evidência que o órgão de controle recebe junto com o resultado publicado.
+  const violacoes = verificarEstabilidade(parametros, resultado);
 
-  const completa: RodadaCompleta = { resultado, violacoes, duracaoMs, parametros };
-  if (cache.size >= TETO_CACHE) {
-    // Descarta a mais antiga que não seja a base (Map preserva ordem de inserção).
-    for (const k of cache.keys()) {
-      if (k === "base") continue;
-      cache.delete(k);
-      break;
-    }
-  }
-  cache.set(chave, completa);
-  return completa;
+  _rodadaBase = { resultado, violacoes, duracaoMs, parametros };
+  return _rodadaBase;
 }
 
 // ────────────────────────────────────────────────── leitura para a família
@@ -295,16 +284,34 @@ export interface ResumoInscricao {
   rodadaId: string;
   duracaoMs: number;
   totalCandidatos: number;
+  /**
+   * Crianças que a entrada desta inscrição remanejou para a opção seguinte
+   * delas. Fica visível de propósito: é o custo real de uma inscrição a mais, e
+   * esconder isso seria esconder o funcionamento da fila.
+   */
+  remanejadas: number;
+  propostasAvaliadas: number;
   /** Frase que a família lê, e que o órgão de controle pode conferir. */
   explicacao: string;
 }
 
 export function resumoDaInscricao(insc: InscricaoViva): ResumoInscricao {
-  const completa = rodada([insc]);
-  const { resultado, parametros } = completa;
+  const base = rodada();
   const eu = candidatoDeInscricao(insc);
 
-  const minha = resultado.alocacoes.find((a) => a.candidato === insc.protocolo) ?? null;
+  // Inserção incremental sobre a rodada base: mesma alocação que reprocessar as
+  // 62.899 crianças (há teste provando a equivalência), em milissegundos.
+  const parametros: ParametrosRodada = {
+    ...base.parametros,
+    candidatos: [...base.parametros.candidatos, eu],
+  };
+  const t0 = performance.now();
+  const ins = inserirCandidato(parametros, base.resultado.alocacoes, insc.protocolo);
+  const duracaoMs = Math.round((performance.now() - t0) * 100) / 100;
+
+  const minha = ins.assento !== null && ins.ordem !== null
+    ? { candidato: insc.protocolo, assento: ins.assento, ordemPreferencia: ins.ordem }
+    : null;
   const capacidadeDe = new Map(parametros.assentos.map((a) => [a.id, a.capacidade]));
 
   // Quantos candidatos disputam cada assento das minhas opções, e quantos deles
@@ -361,9 +368,11 @@ export function resumoDaInscricao(insc: InscricaoViva): ResumoInscricao {
     empatadaEmZero: eu.pontos === 0,
     convite,
     filaDeMelhoria,
-    rodadaId: resultado.rodadaId,
-    duracaoMs: completa.duracaoMs,
+    rodadaId: base.resultado.rodadaId,
+    duracaoMs,
     totalCandidatos: parametros.candidatos.length,
+    remanejadas: ins.deslocamentos.filter((d) => d.assentoNovo !== null).length,
+    propostasAvaliadas: ins.propostas,
     explicacao,
   };
 }

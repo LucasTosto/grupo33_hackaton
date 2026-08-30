@@ -466,6 +466,171 @@ export function cascataDeVaga(
   };
 }
 
+// ─────────────────────────────────────────── inscrição nova, rodada incremental
+
+export interface Deslocamento {
+  candidato: string;
+  /** Assento que perdeu. */
+  assentoPerdido: AssentoId;
+  ordemPerdida: number;
+  /** Assento onde reentrou, ou null se ficou sem assento. */
+  assentoNovo: AssentoId | null;
+  ordemNova: number | null;
+}
+
+export interface Insercao {
+  candidato: string;
+  assento: AssentoId | null;
+  ordem: number | null;
+  /** Quem saiu do lugar para acomodar a cadeia, em ordem. */
+  deslocamentos: Deslocamento[];
+  propostas: number;
+  duracaoMs: number;
+}
+
+/**
+ * Insere uma inscrição nova numa alocação já estável, sem reprocessar a rede.
+ *
+ * A criança propõe à sua 1ª opção. Se há vaga, fica. Se está cheia, disputa com
+ * o ocupante de menor prioridade: se passa, entra, e o deslocado retoma a
+ * proposta a partir da opção seguinte à que perdeu — que é exatamente o que a
+ * aceitação diferida faria. A cadeia é curta porque para no primeiro assento com
+ * vaga ou no primeiro candidato que não passa.
+ *
+ * O resultado é idêntico a rodar a aceitação diferida com a nova criança na
+ * entrada (há teste comparando os dois), mas custa milissegundos em vez de
+ * segundos — e é a modelagem correta: uma inscrição que chega em março não deve
+ * requalificar as 62.899 crianças já classificadas.
+ *
+ * `p.candidatos` inclui a criança nova; `alocacoes` é a alocação estável de
+ * todas as outras.
+ */
+export function inserirCandidato(
+  p: ParametrosRodada,
+  alocacoes: Alocacao[],
+  novoId: string,
+): Insercao {
+  const t0 = performance.now();
+  const cands = prepara(p.candidatos, p.semente, p.ordemDesempate);
+  const novo = cands.get(novoId);
+  if (!novo) throw new Error(`candidato ${novoId} não está na entrada da rodada`);
+
+  const capacidade = new Map(p.assentos.map((a) => [a.id, a.capacidade]));
+  const ocupantes = new Map<AssentoId, string[]>();
+  /** Qual opção cada criança ocupa hoje — o deslocado retoma depois dela. */
+  const ordemDe = new Map<string, number>();
+  for (const a of alocacoes) {
+    const l = ocupantes.get(a.assento);
+    if (l) l.push(a.candidato);
+    else ocupantes.set(a.assento, [a.candidato]);
+    ordemDe.set(a.candidato, a.ordemPreferencia);
+  }
+
+  const deslocamentos: Deslocamento[] = [];
+  let propostas = 0;
+  let assentoDoNovo: AssentoId | null = null;
+  let ordemDoNovo: number | null = null;
+
+  // Fila de quem precisa de assento: id e a partir de qual opção retomar.
+  const fila: { id: string; aPartirDe: number }[] = [{ id: novoId, aPartirDe: 0 }];
+
+  while (fila.length > 0) {
+    const { id, aPartirDe } = fila.shift() as { id: string; aPartirDe: number };
+    const c = cands.get(id);
+    if (!c) continue;
+
+    let colocado: { assento: AssentoId; ordem: number } | null = null;
+
+    for (const pref of c.ordenadas) {
+      if (pref.ordem <= aPartirDe) continue; // já foi recusado nessas
+      const cap = capacidade.get(pref.assento);
+      if (cap === undefined || cap === 0) continue;
+      propostas++;
+
+      const lista = ocupantes.get(pref.assento) ?? [];
+      if (lista.length < cap) {
+        lista.push(id);
+        ocupantes.set(pref.assento, lista);
+        ordemDe.set(id, pref.ordem);
+        colocado = { assento: pref.assento, ordem: pref.ordem };
+        break;
+      }
+
+      // Assento cheio: disputa com o ocupante de menor prioridade.
+      let piorIdx = 0;
+      for (let i = 1; i < lista.length; i++) {
+        const a = cands.get(lista[i]);
+        const b = cands.get(lista[piorIdx]);
+        if (a && b && comparaPrioridade(a, b) < 0) piorIdx = i;
+      }
+      const piorId = lista[piorIdx];
+      const pior = cands.get(piorId);
+      if (!pior || comparaPrioridade(c, pior) <= 0) continue; // não passa: tenta a próxima
+
+      const ordemDoPior = ordemDe.get(piorId) as number;
+      lista[piorIdx] = id;
+      ordemDe.set(id, pref.ordem);
+      ordemDe.delete(piorId);
+      colocado = { assento: pref.assento, ordem: pref.ordem };
+      deslocamentos.push({
+        candidato: piorId,
+        assentoPerdido: pref.assento,
+        ordemPerdida: ordemDoPior,
+        assentoNovo: null,
+        ordemNova: null,
+      });
+      fila.push({ id: piorId, aPartirDe: ordemDoPior });
+      break;
+    }
+
+    if (id === novoId) {
+      assentoDoNovo = colocado ? colocado.assento : null;
+      ordemDoNovo = colocado ? colocado.ordem : null;
+    } else {
+      // Fecha o registro do deslocado com onde ele reentrou.
+      for (let i = deslocamentos.length - 1; i >= 0; i--) {
+        if (deslocamentos[i].candidato !== id) continue;
+        deslocamentos[i].assentoNovo = colocado ? colocado.assento : null;
+        deslocamentos[i].ordemNova = colocado ? colocado.ordem : null;
+        break;
+      }
+    }
+  }
+
+  return {
+    candidato: novoId,
+    assento: assentoDoNovo,
+    ordem: ordemDoNovo,
+    deslocamentos,
+    propostas,
+    duracaoMs: Math.round((performance.now() - t0) * 100) / 100,
+  };
+}
+
+/** Aplica uma inserção sobre uma alocação, devolvendo a nova lista. */
+export function aplicaInsercao(alocacoes: Alocacao[], ins: Insercao): Alocacao[] {
+  const mapa = new Map(alocacoes.map((a) => [a.candidato, { ...a }]));
+  for (const d of ins.deslocamentos) {
+    if (d.assentoNovo && d.ordemNova !== null) {
+      mapa.set(d.candidato, {
+        candidato: d.candidato,
+        assento: d.assentoNovo,
+        ordemPreferencia: d.ordemNova,
+      });
+    } else {
+      mapa.delete(d.candidato);
+    }
+  }
+  if (ins.assento && ins.ordem !== null) {
+    mapa.set(ins.candidato, {
+      candidato: ins.candidato,
+      assento: ins.assento,
+      ordemPreferencia: ins.ordem,
+    });
+  }
+  return [...mapa.values()].sort((a, b) => (a.candidato < b.candidato ? -1 : 1));
+}
+
 // ───────────────────────────────────────────────────── utilitários de assento
 
 export function assentoId(unidade: number, grupamento: string, horario: string): AssentoId {

@@ -12,8 +12,10 @@ import { describe, it } from "node:test";
 
 import {
   alocar,
+  aplicaInsercao,
   assentoId,
   cascataDeVaga,
+  inserirCandidato,
   comparaPrioridade,
   decodificaAssento,
   grupamentoPorNascimento,
@@ -370,6 +372,112 @@ describe("rodada contínua (cascata)", () => {
     const c = cascataDeVaga(entrada, alocacoes, assentos[0].id, 1);
     assert.equal(c.movimentos.length, 1);
     assert.equal(c.encerrouPor, "limite_atingido");
+  });
+});
+
+describe("inscrição nova (rodada incremental)", () => {
+  it("entra na vaga livre da 1ª opção sem deslocar ninguém", () => {
+    const assentos = [assento(1, 2)];
+    const cands = [candidato("velho", 10, [1]), candidato("novo", 0, [1])];
+    const entrada = params(cands, assentos);
+    const anterior = [{ candidato: "velho", assento: assentos[0].id, ordemPreferencia: 1 }];
+
+    const ins = inserirCandidato(entrada, anterior, "novo");
+    assert.equal(ins.assento, assentos[0].id);
+    assert.equal(ins.ordem, 1);
+    assert.deepEqual(ins.deslocamentos, []);
+  });
+
+  it("desloca o ocupante de menor prioridade, que reentra na opção seguinte", () => {
+    const assentos = [assento(1, 1), assento(2, 1)];
+    const cands = [candidato("fraco", 0, [1, 2]), candidato("novo", 90, [1])];
+    const entrada = params(cands, assentos);
+    const anterior = [{ candidato: "fraco", assento: assentos[0].id, ordemPreferencia: 1 }];
+
+    const ins = inserirCandidato(entrada, anterior, "novo");
+    assert.equal(ins.assento, assentos[0].id);
+    assert.equal(ins.deslocamentos.length, 1);
+    assert.equal(ins.deslocamentos[0].candidato, "fraco");
+    assert.equal(ins.deslocamentos[0].assentoNovo, assentos[1].id, "reentra na 2ª opção dele");
+    assert.equal(ins.deslocamentos[0].ordemNova, 2);
+  });
+
+  it("o deslocado não volta a propor para a opção que já perdeu", () => {
+    const assentos = [assento(1, 1)];
+    const cands = [candidato("fraco", 0, [1]), candidato("novo", 90, [1])];
+    const entrada = params(cands, assentos);
+    const anterior = [{ candidato: "fraco", assento: assentos[0].id, ordemPreferencia: 1 }];
+
+    const ins = inserirCandidato(entrada, anterior, "novo");
+    assert.equal(ins.deslocamentos[0].assentoNovo, null, "fica sem assento, sem laço infinito");
+  });
+
+  it("fica sem assento quando nenhuma opção tem vaga nem candidato pior", () => {
+    const assentos = [assento(1, 1), assento(2, 1)];
+    const cands = [
+      candidato("forte1", 90, [1]),
+      candidato("forte2", 90, [2], [29]),
+      candidato("novo", 0, [1, 2]),
+    ];
+    const entrada = params(cands, assentos);
+    const anterior = [
+      { candidato: "forte1", assento: assentos[0].id, ordemPreferencia: 1 },
+      { candidato: "forte2", assento: assentos[1].id, ordemPreferencia: 1 },
+    ];
+
+    const ins = inserirCandidato(entrada, anterior, "novo");
+    assert.equal(ins.assento, null);
+    assert.deepEqual(ins.deslocamentos, []);
+  });
+
+  it("produz exatamente a mesma alocação que rodar a rodada inteira", () => {
+    const rnd = prng(31415);
+    const assentos = Array.from({ length: 30 }, (_, i) => assento(i + 1, 1 + Math.floor(rnd() * 5)));
+    const base: Candidato[] = [];
+    for (let i = 0; i < 600; i++) {
+      const n = 1 + Math.floor(rnd() * 5);
+      const esc = new Set<number>();
+      while (esc.size < n) esc.add(1 + Math.floor(rnd() * 30));
+      base.push(candidato(`c${i}`, rnd() < 0.94 ? 0 : Math.floor(rnd() * 100), [...esc]));
+    }
+
+    const semNovo = params(base, assentos);
+    const alocacaoBase = alocar(semNovo);
+    assert.deepEqual(verificarEstabilidade(semNovo, alocacaoBase), []);
+
+    // Testa várias inscrições novas com perfis diferentes.
+    for (const [nome, pontos, opcoes, desemp] of [
+      ["novo-zerado", 0, [3, 7, 11, 19, 25], []],
+      ["novo-cadunico", 51, [1, 2, 3], []],
+      ["novo-maximo", 100, [5, 9], [29, 30]],
+      ["novo-uma-opcao", 0, [12], []],
+    ] as [string, number, number[], number[]][]) {
+      const novo = candidato(nome, pontos, opcoes, desemp);
+      const comNovo = params([...base, novo], assentos);
+
+      const incremental = aplicaInsercao(
+        alocacaoBase.alocacoes,
+        inserirCandidato(comNovo, alocacaoBase.alocacoes, nome),
+      );
+      const completa = alocar(comNovo).alocacoes;
+
+      assert.deepEqual(
+        incremental,
+        completa,
+        `${nome}: a inserção incremental divergiu da rodada completa`,
+      );
+      assert.deepEqual(
+        verificarEstabilidade(comNovo, { ...alocacaoBase, alocacoes: incremental }),
+        [],
+        `${nome}: a inserção incremental quebrou a estabilidade`,
+      );
+    }
+  });
+
+  it("rejeita candidato que não está na entrada", () => {
+    const assentos = [assento(1, 1)];
+    const entrada = params([candidato("a", 0, [1])], assentos);
+    assert.throws(() => inserirCandidato(entrada, [], "fantasma"), /não está na entrada/);
   });
 });
 

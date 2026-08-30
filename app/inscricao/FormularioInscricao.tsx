@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Criterio } from "@/lib/dados";
 
@@ -43,6 +43,8 @@ interface Resumo {
   rodadaId: string;
   duracaoMs: number;
   totalCandidatos: number;
+  remanejadas: number;
+  propostasAvaliadas: number;
   explicacao: string;
 }
 
@@ -148,6 +150,19 @@ export default function FormularioInscricao({
       vivo = false;
     };
   }, [grupamento, horario, bairro]);
+
+  // Aquece o motor enquanto a família escolhe as creches: sem isso, o primeiro
+  // envio numa instância fria paga a decodificação da fila inteira mais a rodada
+  // base, uns 6 s de espera olhando um botão. Dispara uma vez só, e sem abortar
+  // na troca de passo — cancelar o aquecimento no meio anularia o ganho.
+  const jaAqueceu = useRef(false);
+  useEffect(() => {
+    if (passo < 2 || jaAqueceu.current) return;
+    jaAqueceu.current = true;
+    fetch("/api/inscricao").catch(() => {
+      // aquecimento é otimização: falhar aqui não impede o envio
+    });
+  }, [passo]);
 
   const porCodigo = useMemo(() => new Map(unidades.map((u) => [u.codigo, u])), [unidades]);
 
@@ -649,8 +664,19 @@ function Resultado({
           <Linha rotulo="Rodada">
             <span className="num text-[13.5px]">{resumo.rodadaId}</span>
           </Linha>
-          <Linha rotulo="Concorrentes">
-            {resumo.totalCandidatos.toLocaleString("pt-BR")} crianças classificadas em {resumo.duracaoMs} ms
+          <Linha rotulo="Fila do processo">
+            {resumo.totalCandidatos.toLocaleString("pt-BR")} crianças classificadas
+          </Linha>
+          <Linha rotulo="Classificação incremental">
+            {resumo.propostasAvaliadas} {resumo.propostasAvaliadas === 1 ? "proposta" : "propostas"} avaliadas em{" "}
+            {resumo.duracaoMs.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} ms
+            {resumo.remanejadas > 0 && (
+              <span className="mt-1 block text-[13.5px] text-ink-3">
+                {resumo.remanejadas}{" "}
+                {resumo.remanejadas === 1 ? "criança foi remanejada" : "crianças foram remanejadas"} para a
+                opção seguinte delas — nenhuma perdeu a vaga, e nenhuma à frente na fila foi ultrapassada.
+              </span>
+            )}
           </Linha>
         </dl>
       </div>

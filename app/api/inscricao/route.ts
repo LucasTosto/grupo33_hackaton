@@ -7,6 +7,7 @@ import {
   COMPROVANTES,
   GRUPAMENTOS,
   HORARIOS,
+  rodada,
   resumoDaInscricao,
   unidadePorCodigo,
   type InscricaoViva,
@@ -41,6 +42,31 @@ function geraProtocolo(c: Corpo): string {
   const material = [c.nascimento, c.bairro, c.horario, (c.opcoes ?? []).join(","), (c.criterios ?? []).sort().join(",")].join("|");
   const h = createHash("sha256").update(material).digest("hex").slice(0, 8).toUpperCase();
   return `RJ-${ANO_PROCESSO}-${h}`;
+}
+
+/**
+ * Aquece o motor: decodifica a fila de 2025 e calcula a rodada base, deixando
+ * tudo em memória da instância.
+ *
+ * O primeiro POST numa instância fria paga a decodificação de 72 mil inscrições
+ * mais a rodada inteira — uns 6 s. O formulário chama este GET quando a família
+ * chega no passo das creches, então o envio já encontra a instância quente. Não
+ * é truque de demo: é a mesma coisa que um `warmup` de qualquer serviço que
+ * carrega índice na subida.
+ */
+export function GET() {
+  const t0 = performance.now();
+  const base = rodada();
+  return NextResponse.json(
+    {
+      pronto: true,
+      criancasNaFila: base.parametros.candidatos.length,
+      assentos: base.parametros.assentos.length,
+      rodadaId: base.resultado.rodadaId,
+      aquecimentoMs: Math.round(performance.now() - t0),
+    },
+    { headers: { "cache-control": "no-store" } },
+  );
 }
 
 export async function POST(req: Request) {
