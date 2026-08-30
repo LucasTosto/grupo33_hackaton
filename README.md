@@ -8,7 +8,7 @@ Claude Impact Lab Rio · Eixos 2 e 3 · Grupo nº 33 · 30/08/2026
 | | |
 |---|---|
 | **Aplicação** | **https://grupo33-hackathon.vercel.app/** |
-| **Vídeo demo (60s)** | `PREENCHER` |
+| **Vídeo demo (60s)** | `É o arquivo mim-fdra-umb (2026-08-30 16_24 GMT-3), na raiz do repo` |
 | **Design técnico** | [`docs/TDD.md`](docs/TDD.md) |
 | **Premissas e ressalvas** | [`PREMISSAS.md`](PREMISSAS.md) |
 | **Identidade visual** | [`docs/IDENTIDADE-VISUAL.md`](docs/IDENTIDADE-VISUAL.md) |
