@@ -2,9 +2,9 @@
 
 **Claude Impact Lab Rio · Eixos 2 e 3 · 30/08/2026**
 
-- **Equipe:** `Team 33`
+- **Equipe:** Seed 33
 - **Grupo nº:** 33
-- **Membros:** `Camila Nascimento, João Assumpção, Pedro Moradillo, Lucas Tosto`
+- **Membros:** Camila Nascimento, João Assumpção, Pedro Moradillo, Lucas Tosto
 - **Aplicação:** `PREENCHER — URL da Vercel`
 - **Vídeo demo (60s):** `PREENCHER`
 
