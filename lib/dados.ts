@@ -222,7 +222,13 @@ export interface RodadaCompleta {
   parametros: ParametrosRodada;
 }
 
+/**
+ * Cada rodada guardada carrega ~48 mil alocações. Segurar muitas estoura a
+ * memória de uma instância pequena, então o teto é baixo de propósito: a rodada
+ * base é a que se repete, as demais são de uma inscrição só.
+ */
 const cache = new Map<string, RodadaCompleta>();
+const TETO_CACHE = 4;
 
 /** Roda o processo com a fila real de 2025 mais as inscrições vivas passadas. */
 export function rodada(vivas: InscricaoViva[] = []): RodadaCompleta {
@@ -249,7 +255,14 @@ export function rodada(vivas: InscricaoViva[] = []): RodadaCompleta {
   const violacoes = chave === "base" ? verificarEstabilidade(parametros, resultado) : cache.get("base")?.violacoes ?? [];
 
   const completa: RodadaCompleta = { resultado, violacoes, duracaoMs, parametros };
-  if (cache.size > 24) cache.clear();
+  if (cache.size >= TETO_CACHE) {
+    // Descarta a mais antiga que não seja a base (Map preserva ordem de inserção).
+    for (const k of cache.keys()) {
+      if (k === "base") continue;
+      cache.delete(k);
+      break;
+    }
+  }
   cache.set(chave, completa);
   return completa;
 }
