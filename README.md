@@ -1,17 +1,25 @@
-# Vaga Certa — inscrição em creche com um convite por criança
+# Vaga Certa
 
-**Claude Impact Lab Rio · Eixos 2 e 3 · 30/08/2026**
+**Inscrição em creche da rede municipal do Rio com um convite por criança: alocação determinística,
+desempate auditável e uma segunda porta para a vaga que hoje fica ociosa.**
 
-- **Equipe:** Vaga Certa
-- **Grupo nº:** 33
-- **Membros:** Camila Nascimento, João Assumpção, Pedro Moradillo, Lucas Tosto
-- **Aplicação:** **https://grupo33-hackathon.vercel.app/**
-- **Vídeo demo (60s):** `PREENCHER`
-- **Documento de design técnico:** [`docs/TDD.md`](docs/TDD.md)
+Claude Impact Lab Rio · Eixos 2 e 3 · Grupo nº 33 · 30/08/2026
+
+| | |
+|---|---|
+| **Aplicação** | **https://grupo33-hackathon.vercel.app/** |
+| **Vídeo demo (60s)** | `PREENCHER` |
+| **Design técnico** | [`docs/TDD.md`](docs/TDD.md) |
+| **Premissas e ressalvas** | [`PREMISSAS.md`](PREMISSAS.md) |
+| **Identidade visual** | [`docs/IDENTIDADE-VISUAL.md`](docs/IDENTIDADE-VISUAL.md) |
+| **Equipe** | Camila Nascimento, João Assumpção, Pedro Moradillo, Lucas Tosto |
+
+**Índice** · [O problema](#o-problema-e-o-achado) · [O que muda no fluxo](#o-que-muda-no-fluxo) ·
+[Resultado](#resultado) · [Como rodar](#como-rodar) · [Como funciona](#como-funciona) ·
+[Decisões de produto](#decisões-de-produto) · [O site](#o-site) · [Arquitetura](#arquitetura) ·
+[Testes](#testes) · [Premissas](#premissas-e-ressalvas) · [Como o Claude foi usado](#como-o-claude-foi-usado)
 
 ---
-
-## Resumo
 
 Hoje uma inscrição em creche gera **até cinco filas paralelas para a mesma criança**. Ela é
 classificada cinco vezes, recebe cinco ofertas, ocupa cinco assentos, aceita um — e os outros quatro
@@ -19,8 +27,93 @@ ficam congelados até serem repassados. O próximo da fila pode estar na mesma s
 
 O Vaga Certa troca a **classificação por opção** pela **classificação por criança**. A ordem de
 prioridade da Resolução é executada exatamente como está escrita: o que muda é a sequência das
-ofertas. Cada criança recebe no máximo um convite, e as opções melhores continuam valendo como fila
-de melhoria.
+ofertas.
+
+> O ganho não vem de acelerar o convite. Vem de nunca emitir os quatro convites que não podem ser
+> aceitos.
+
+## O problema e o achado
+
+Cruzando a Query B com a régua da Query C, no processo de 2025:
+
+- **68,2%** das inscrições declararam ao menos um critério de prioridade.
+- **6,2%** chegaram à classificação com pontuação acima de zero.
+- Logo, **93,8% da fila — 67.505 inscrições — entra empatada em zero ponto.**
+
+**A régua de pontuação da Resolução praticamente não classifica.** Quem ordena a fila, na prática, é
+o critério de desempate — e é por isso que o motor publica a semente do sorteio e torna o desempate
+reproduzível por terceiros, em vez de tratá-lo como detalhe de implementação.
+
+**O que não sabemos, e que precisa ser dito assim.** No campo que a extração expõe como comprovação,
+**62% de todas as inscrições declararam critério e aparecem com zero ponto**. Ou é perda real de
+pontuação, ou a validação automática não está sendo registrada de forma auditável. Não sabemos qual —
+é a primeira pergunta para a equipe de dados da SME, e a solução resolve os dois casos: se é perda
+real, o funil de comprovação automática recupera; se é registro, a rodada versionada passa a deixar
+rastro auditável de cada critério validado. O campo `confirmado` também é uniforme dentro da inscrição
+em 96,7% dos casos, o que é compatível com as duas leituras.
+
+Fechar a distância entre declarar e comprovar vale mais, em vagas, do que qualquer refinamento no
+algoritmo. É o que reordenou nossas prioridades.
+
+## O que muda no fluxo
+
+Hoje a família escolhe cinco creches sem saber quanto sua inscrição vale, e comprova depois. A
+inversão dessa ordem é a mudança estrutural — não o algoritmo.
+
+```
+1 · INSCRIÇÃO            2 · COMPROVAÇÃO          3 · ESCOLHA             4 · CHAMADAS
+─────────────            ───────────────          ───────────             ────────────
+nascimento, bairro       automática por           3 creches na ordem      rodada toda sexta
+e critérios              base oficial             real de preferência     manifestação até quinta
+                     →                        →                       →
+o score fecha aqui       62 dos 100 pontos        faixa de posição        quem não responde volta
+                         presencial só no         visível                 na rodada seguinte
+                         resíduo                                          o ano inteiro
+
+Uma criança, uma alocação por rodada. Nenhum assento fica retido esperando
+quem já se matriculou em outro lugar.
+```
+
+| | Hoje | Vaga Certa |
+|---|---|---|
+| Unidade de classificação | a opção escolhida | **a criança** |
+| Filas por criança | até 5 simultâneas | **1** |
+| Quando a família escolhe | sem saber quanto vale | **com o score fechado** |
+| Comprovação | presencial por padrão | **automática; presencial é exceção** |
+| Perda por não comprovar | a inscrição inteira | **só o critério não comprovado** |
+| Ordem dentro do empate | indefinida | **sorteio publicado e reproduzível** |
+| Convocação | 3 tentativas e descarte | **rodada semanal recorrente** |
+| Aceitar uma vaga | tira de todas as filas | **mantém a opção que a família escolher** |
+| Vaga ociosa | invisível | **mapa público, dois regimes de ocupação** |
+| Auditoria | conferência manual | **rodada reproduzível por terceiros** |
+
+Duas ressalvas para não vender o que não entregamos: **os quatro períodos não estão separados no
+protótipo** — o formulário reúne os quatro em cinco passos — e **a comprovação automática por base
+oficial é desenho de processo, não código entregue**. O protótipo trata o critério declarado como
+comprovado. O que está implementado é a régua, a alocação, o desempate auditável e as duas portas de
+entrada. Detalhes em [`PREMISSAS.md`](PREMISSAS.md).
+
+### Comprovação sem papel: 62 dos 100 pontos
+
+A família não sobe documento nenhum. Cada critério tem uma base oficial que a SME já consulta, e OCR
+não valida elegibilidade — só a consulta à base valida.
+
+| Critério | Base oficial | Peso 2025 |
+|---|---|---:|
+| CadÚnico | SMAS via Data Lake | 51 pts |
+| Família monoparental | composição familiar do CadÚnico | 4 pts |
+| Responsável com deficiência | BPC / INSS | 3 pts |
+| Bolsa Família ou Cartão Carioca | folha do PBF e base municipal | 2 pts |
+| Fila no ano anterior | base do próprio Inscrição Creche | 2 pts |
+| Irmão matriculado na rede | gestão acadêmica da própria SME | desempate |
+| Responsável menor de 18 | registro civil / Receita | desempate |
+
+São **62 dos 100 pontos e os dois desempates**, sem presencial. Os pesos saem de
+[`catalogo-2025.json`](lib/data/catalogo-2025.json), extraído da Query C. Enquanto isso não existe, o
+formulário entrega no fim a **lista exata de documentos** que a família precisa levar para cada
+critério marcado.
+
+## Resultado
 
 Rodando o motor sobre o processo real de 2025 (`prm_id 195`), com a **mesma fila e a mesma
 capacidade** que a rede teve:
@@ -37,35 +130,40 @@ capacidade** que a rede teve:
 A rodada inteira — 62.899 crianças, 2.114 assentos, 94.387 propostas avaliadas — leva **~3,8 s**, e a
 prova de que ninguém foi ultrapassado leva outros **~1,1 s**.
 
-> O ganho não vem de acelerar o convite. Vem de nunca emitir os quatro convites que não podem ser
-> aceitos.
+O que o backtest chama de capacidade é uma **referência observada**, não capacidade autorizada. Por
+que essa escolha, e o que ela não permite concluir: [`PREMISSAS.md`](PREMISSAS.md).
 
-## O achado que reordenou nossas prioridades
+## Como rodar
 
-Cruzando a Query B com a régua da Query C, no processo de 2025:
+**Pré-requisitos:** Node **24 ou superior** (o motor e os testes rodam sob o type-stripping nativo,
+sem transpilador) e npm. Python 3 só é necessário para regenerar as sementes.
 
-- **68,2%** das inscrições declararam ao menos um critério de prioridade.
-- **6,2%** chegaram à classificação com pontuação acima de zero.
-- Logo, **93,8% da fila — 67.505 inscrições — entra empatada em zero ponto.**
+```bash
+npm install
+npm run dev              # http://localhost:3000
+npm test                 # 40 testes, sem transpilador
+npm run build
+```
 
-**O que não sabemos, e que precisa ser dito assim.** No campo que a extração expõe como comprovação,
-**62% de todas as inscrições declararam critério e aparecem com zero ponto**. Ou é perda real de
-pontuação, ou a validação automática não está sendo registrada de forma auditável. Não sabemos qual —
-é a primeira pergunta para a equipe de dados da SME, e a solução resolve os dois casos: se é perda
-real, o funil de comprovação automática recupera; se é registro, a rodada versionada passa a deixar
-rastro auditável de cada critério validado.
+| Script | O que faz |
+|---|---|
+| `npm run dev` | servidor de desenvolvimento |
+| `npm run build` | build de produção; a rodada de 2025 é calculada aqui, para `/painel` e `/vagas` |
+| `npm start` | serve o build |
+| `npm test` | 31 testes do motor + 9 do vetor de desempate |
+| `npm run lint` | ESLint via Next |
+| `npm run seeds` | roda os três extratores Python em sequência |
+| `npm run backtest` | motor × processo real → `lib/data/backtest.json` |
 
-O campo `confirmado` também é uniforme dentro da inscrição em 96,7% dos casos, o que é compatível com
-as duas leituras.
+Para regenerar as sementes a partir das bases oficiais — **opcional, elas estão versionadas**:
 
-Isso muda o que a solução precisa fazer. **A régua de pontuação da Resolução praticamente não
-classifica.** Quem ordena a fila, na prática, é o critério de desempate — e é por isso que o motor
-publica a semente do sorteio e torna o desempate reproduzível por terceiros, em vez de tratá-lo como
-detalhe de implementação.
-
-E é por isso que o formulário, depois de enviar, entrega a **lista exata de documentos** que a
-família precisa levar para cada critério marcado. Fechar a distância entre declarar e comprovar vale
-mais, em vagas, do que qualquer refinamento no algoritmo.
+```bash
+git clone https://github.com/CIT-SME-RJ/dadoscreche.git ../dadoscreche
+python scripts/extract_seeds.py ../dadoscreche
+python scripts/compacta_fila.py
+python scripts/capacidade_real.py
+npm run backtest
+```
 
 ## Como funciona
 
@@ -81,6 +179,13 @@ assento = (unidade, grupamento, horario)
 assentos em 831 unidades. O grupamento é derivado do nascimento com o corte de 31 de março; a família
 não escolhe.
 
+### A criança, não a inscrição
+
+A chave de uma inscrição na base é `(polo, inscrição)`, e **a mesma criança pode estar inscrita em
+mais de um polo do mesmo processo**. Alocar por inscrição dava dois assentos a 3.147 crianças —
+reproduzindo o problema em outra escala. As 71.949 inscrições são agrupadas nas 62.899 crianças reais
+antes da rodada ([`lib/fila.ts`](lib/fila.ts)).
+
 ### Prioridade: vetor lexicográfico versionado
 
 ```
@@ -89,9 +194,9 @@ p(criança) = ( pontuação_da_resolução ,
                posição_no_sorteio )
 ```
 
-As 13 perguntas de 2025 e seus pesos (Cadúnico vale 51 dos 100 pontos) são **dado versionado**, não
-código: [`lib/data/catalogo-2025.json`](lib/data/catalogo-2025.json), extraído da Query C. Quando a
-Resolução do ano seguinte é publicada, ninguém faz deploy.
+As 13 perguntas de 2025 e seus pesos (CadÚnico vale 51 dos 100 pontos) são **dado versionado**, não
+código: [`lib/data/catalogo-2025.json`](lib/data/catalogo-2025.json). Quando a Resolução do ano
+seguinte é publicada, ninguém faz deploy.
 
 **A própria sequência de desempate também é dado**, em
 [`lib/data/desempate.json`](lib/data/desempate.json):
@@ -180,68 +285,85 @@ inscrição, sobre instância de 600 candidatos. O custo cai de segundos para mi
 | propostas avaliadas | 94.387 | **1 a 4** |
 | tempo de resposta | ~3.800 ms | **~190 ms** |
 
-O formulário ainda chama um `GET /api/inscricao` quando a família chega no passo das creches, para
-aquecer a instância — sem isso o primeiro envio paga a decodificação da fila mais a rodada base.
+O formulário chama um `GET /api/inscricao` quando a família chega no passo das creches, para aquecer a
+instância — sem isso o primeiro envio paga a decodificação da fila mais a rodada base.
 
-### A criança, não a inscrição
+## Decisões de produto
 
-A chave de uma inscrição na base é `(polo, inscrição)`, e **a mesma criança pode estar inscrita em
-mais de um polo do mesmo processo**. Alocar por inscrição dava dois assentos a 3.147 crianças —
-reproduzindo o problema em outra escala. As 71.949 inscrições são agrupadas nas 62.899 crianças reais
-antes da rodada ([`lib/fila.ts`](lib/fila.ts)).
+Cada uma é um campo de [`lib/data/parametros-195.json`](lib/data/parametros-195.json), com a
+justificativa no próprio dado. Trocar o parâmetro não exige tocar em código.
 
-## O que dá para fazer no site
+### Três opções, não cinco
+
+**94,2%** das crianças que conseguiram vaga entre 2021 e 2025 conseguiram numa das três primeiras
+opções. A 4ª e a 5ª responderam por 5,8% — cerca de 2.240 crianças por ano. A cauda longa foi
+substituída pelo mapa de vacância, que atende esse grupo melhor do que uma quarta opção escolhida no
+escuro. Nos dados, a 5ª opção também é a mais distante de casa: 61,1% fora do bairro, contra 48,3% na
+1ª.
+
+### Lista de espera: uma opção, escolhida pela família
+
+Guardar todas as opções melhores é mais generoso, mas gera cascatas longas e uma regra que não cabe em
+frase de edital. Guardar sempre a 1ª cria incentivo perverso: quem vê que é 200º na creche que quer
+move algo alcançável para o topo e perde a desejada em definitivo. **Deixar a família escolher qual
+manter** preserva a simplicidade sem criar o incentivo. A matrícula é piso, não teto.
+
+### Posição em faixa, não número cravado
+
+A posição na fila aparece como faixa de ±25%, em todas as opções. Número exato cria falsa precisão e é
+o que gera sensação de traição quando a posição se move; a faixa comunica a incerteza real. Junto vem
+a frase da mecânica: *colocar uma creche disputada em 1º lugar não reduz suas chances nas demais* — o
+que é verdade porque o motor é à prova de estratégia.
+
+### Rodada semanal, em vez de três telefonemas
+
+Hoje a escola tenta contato uma vez por dia durante três dias; não localizou, a criança sai da lista.
+Na proposta há **rodada toda sexta, com manifestação até a quinta seguinte**, e quem não responde
+volta na rodada seguinte em vez de ser descartado. O modelo deixa de ser *push* e passa a ser *pull*.
+A manifestação também é presencial — no polo, na unidade e por ligação receptiva: um processo só por
+aplicativo transferiria a exclusão digital para dentro da parte mais eficiente da solução.
+
+A porta contínua já existe na prática: **20,5%** das inscrições dos últimos cinco processos foram
+criadas fora da janela oficial — e conseguem vaga em 60,3% dos casos, contra 55,0%. Formalizar é
+reconhecer o que a rede já faz. *(Análise sobre a extração 2021–2025; ao contrário dos demais números
+deste README, não sai das sementes versionadas em `lib/data/`.)*
+
+### Mapa de vacância: dois regimes, nunca um só
+
+A regra que impede o furo de fila está nos próprios dados: **84% do estoque de vaga disponível não tem
+ninguém na lista de espera**.
+
+| Regime | Estoque | Como é ocupada |
+|---|---|---|
+| **Vaga sem fila** | 6.963 vagas em 761 assentos | **autoatendimento pelo mapa.** Não há fila para furar, e a pontuação é irrelevante |
+| **Vaga com fila** | 1.327 vagas em 264 assentos, 6.915 crianças aguardando | **nunca autoatendimento.** A rodada semanal aloca por prioridade; no mapa aparece como "entrar na lista" |
+
+O celular mais rápido não pode passar à frente da maior vulnerabilidade. A criança que ocupa uma vaga
+ociosa começa a frequentar **sem sair da lista de espera da opção que escolheu manter**.
+
+A vaga é calculada como `turmas × lotação de referência − alunos`, com lotação de referência **25 (p90
+observado), ajustável** como campo de parametrização. Não é capacidade real nem autorizada.
+
+## O site
 
 | Página | O que faz |
 |---|---|
 | `/` | O problema, com os números do processo real de 2025 e a tabela do backtest |
-| `/inscricao` | Inscrição em 5 passos: nascimento → bairro → até 5 creches ordenadas → 13 critérios → conferir |
-| `/acompanhar` | Convite, posição na fila e fila de melhoria da inscrição feita |
-| `/painel` | A rodada por dentro: identidade, garantias, **simulador de vaga liberada**, ociosidade por assento e pressão por bairro |
+| `/inscricao` | Cinco passos: nascimento → bairro → **até 3 creches** ordenadas → 13 critérios → conferir, onde a família **escolhe qual opção fica na lista de espera** |
+| `/acompanhar` | Convite, faixa de posição e lista de espera da inscrição feita |
+| `/vagas` | **Mapa de vacância:** os dois regimes, próxima rodada e prazo, assentos com vaga sem fila e com fila, e onde a vaga ociosa se concentra |
+| `/painel` | A rodada por dentro: identidade, garantias verificadas, **simulador de vaga liberada**, ocupação da rede e pressão por bairro |
 
-Escolhas de produto que valem menção:
+Escolhas de interface que valem menção:
 
 - **As 831 creches são reais**, ordenadas pela distância até o centróide do bairro informado, com a
   concorrência de 2025 à mostra (`2,5 candidatos por vaga`). Informar não abre brecha para
   manipulação justamente porque o motor é à prova de estratégia.
 - **O grupamento é derivado, não escolhido** — o corte de 31/03 aparece na hora, com a idade.
 - **A lista de documentos por critério** é gerada no fim do formulário.
-- Alvos grandes, foco sempre visível, `skip link`, `aria-pressed` nos botões de escolha e contraste
-  alto: o formulário é o caminho de uma família em pé numa fila, muitas vezes no celular.
-
-## Identidade visual
-
-A interface segue o [Manual de Marca Prefeitura Rio 2025](https://educacao.prefeitura.rio/wp-content/uploads/sites/42/2025/01/MANUAL-DE-MARCA-PREFEITURA-RIO-2025.pdf),
-publicado pela própria SME em [educacao.prefeitura.rio/identidade-visual](https://educacao.prefeitura.rio/identidade-visual/).
-O manual define cinco cores, e são exatamente essas as usadas:
-
-| Cor | Uso aqui |
-|---|---|
-| `#13335a` azul institucional | assinatura, cabeçalhos de tabela e de cartão, botão primário |
-| `#eceded` cinza | fundo de seção alternada |
-| `#2a688f` azul médio | rótulos de apoio |
-| `#42b9eb` azul claro | filete de seção, borda superior de cartão, texto sobre azul escuro |
-| `#f06949` coral | **não usado** — o manual restringe o degradê quente a filme publicitário |
-
-A estrutura de página reproduz o padrão observável no [matricula.rio](https://matricula.rio) e no
-[portal da SME](https://educacao.prefeitura.rio): barra utilitária ligando ao `prefeitura.rio`,
-assinatura institucional em duas linhas (órgão superior + secretaria), navegação em versal, conteúdo
-em cartões sobre fundo claro, e rodapé com endereço e serviços relacionados.
-
-Três decisões que valem registro:
-
-- **Tipografia.** A fonte oficial é **Cera Pro**, distribuída pela SME para uso próprio. É fonte
-  comercial: embuti-la num app público seria redistribuição indevida. Usamos **DM Sans**, o
-  substituto livre mais próximo em estrutura — geométrica, contraste baixo, `a` de dois andares,
-  altura-x alta. A troca está declarada no rodapé do site.
-- **Caixa alta.** O manual pede título preferencialmente em CAIXA ALTA. Aplicamos isso em rótulos,
-  navegação, botões e cabeçalhos de tabela, mas **não** em títulos longos: texto extenso em versal
-  prejudica leitura e leitores de tela. É o que o próprio portal da SME faz na prática.
-- **Contraste.** Todas as combinações de texto passam WCAG AA. Duas correções foram necessárias:
-  `#42b9eb` tem 2,24:1 sobre branco e por isso nunca é texto sobre fundo claro (só sobre o azul
-  escuro, onde dá 5,68:1); e o cinza de rótulo foi escurecido de `#6b7a8c` para `#5a6877`, porque a
-  1,5 pt de tamanho ele ficava em 4,39:1 sobre branco e 3,74:1 sobre `#eceded` — abaixo do mínimo.
-  Com o novo valor: 5,70:1, 4,86:1 e 5,26:1 nos três fundos do site.
+- **A inscrição mostra quantas crianças ela remanejou.** Fica visível de propósito: é o custo real de
+  uma inscrição a mais, e esconder isso seria esconder o funcionamento da fila.
+- Acessibilidade e paleta institucional: [`docs/IDENTIDADE-VISUAL.md`](docs/IDENTIDADE-VISUAL.md).
 
 ## Arquitetura
 
@@ -250,6 +372,7 @@ app/                     Next.js 16 · App Router
   page.tsx               landing (estática)
   inscricao/             formulário (client) + página servidora
   acompanhar/            consulta da inscrição
+  vagas/                 mapa de vacância (force-static)
   painel/                painel da rede (force-static: a rodada roda no build)
   api/unidades/          creches por assento, ordenadas por distância
   api/inscricao/         valida, roda a classificação, devolve convite + comprovantes
@@ -260,15 +383,25 @@ lib/
   engine/index.ts        MOTOR — arquivo único, zero dependências
   fila.ts                decodificação e agrupamento por criança
   dados.ts               camada de dados do servidor (server-only)
-  data/                  sementes versionadas, extraídas das bases da SME
+  data/
+    catalogo-2025.json   as 13 perguntas e pesos do processo 195
+    desempate.json       o vetor de desempate, com vigência por nível
+    parametros-195.json  decisões de produto parametrizadas
+    unidades.json        831 unidades, assentos, turmas e alunos de 2025
+    fila-2025.json       a fila do processo real, compactada
+    fatos.json           números do diagnóstico
+    backtest.json        saída do motor × processo real
 
 scripts/
   extract_seeds.py       bases da SME  → catálogo, unidades, fatos, semente da fila
   compacta_fila.py       semente de 44 MB → 4,4 MB carregável pela aplicação
   capacidade_real.py     capacidade = o que a rede de fato matriculou em 2025
+  turmas.py              turmas e alunos por assento, base do mapa de vacância
   backtest.ts            motor × processo real → lib/data/backtest.json
 
-test/engine.test.ts      31 testes, sem transpilador (type-stripping do Node 24)
+test/
+  engine.test.ts         31 testes do motor
+  desempate.test.ts      9 testes do vetor de desempate como dado
 ```
 
 Decisões que sustentam o resto:
@@ -286,24 +419,44 @@ Decisões que sustentam o resto:
   deixa a superfície de dado pessoal em zero. Em produção, a consulta seria por protocolo + CPF
   contra o registro da inscrição.
 
-## Como rodar
+## Testes
 
 ```bash
-npm install
-npm run dev              # http://localhost:3000
-npm test                 # 31 testes do motor
-npm run build
+npm test                 # 40 testes, sem transpilador
 ```
 
-Para regenerar as sementes a partir das bases oficiais (opcional — elas estão versionadas):
+O que está sendo testado não é "o código roda", e sim as promessas que a solução faz a um órgão de
+controle.
 
-```bash
-git clone https://github.com/CIT-SME-RJ/dadoscreche.git ../dadoscreche
-python scripts/extract_seeds.py ../dadoscreche
-python scripts/compacta_fila.py
-python scripts/capacidade_real.py
-npm run backtest
-```
+| Suíte | Prova |
+|---|---|
+| `prioridade` | a régua ordena como a Resolução manda, e o sorteio é determinístico por semente |
+| `garantias da rodada` | um convite por criança, nenhum assento acima da capacidade |
+| `estabilidade` | nenhum par bloqueador, em instância aleatória — ninguém à sua frente foi ultrapassado |
+| `reprodutibilidade` | mesmas entradas ⇒ mesmo `hashEntrada` e mesma alocação |
+| `assento e grupamento` | o corte de 31 de março e a codificação do assento |
+| `rodada contínua (cascata)` | a cadeia termina, e a estabilidade sobrevive a ela |
+| `inscrição nova (rodada incremental)` | a inserção dá saída **idêntica** à rodada completa, candidato por candidato |
+| `vetor de desempate como dado versionado` | ativar um nível que o motor não implementa **falha** em vez de produzir rodada silenciosamente errada |
+
+A verificação de estabilidade não fica só nos testes: ela acompanha cada rodada, porque é a evidência
+que o órgão de controle recebe junto com o resultado publicado. Foi ela que pegou os dois bugs reais
+do projeto.
+
+## Premissas e ressalvas
+
+Cinco premissas declaradas, cada uma com o caminho de substituição quando a SME confirmar o parâmetro
+real, e nove ressalvas sobre o que os números **não** permitem concluir:
+**[`PREMISSAS.md`](PREMISSAS.md)**.
+
+As quatro mais importantes, em uma linha cada:
+
+- A capacidade do backtest é **referência observada**, não capacidade autorizada.
+- A lotação de 25 por turma no mapa de vacância é **p90 observado e ajustável**.
+- A distância é até o **centróide do bairro**, não até a casa — o que medimos é o piso do desempate
+  territorial, nunca o teto.
+- A **proximidade está declarada e fora de vigor**: o instrumento normativo que a institui está a
+  confirmar.
 
 ## Como o Claude foi usado
 
@@ -316,37 +469,14 @@ Claude Opus 5 conduziu o trabalho de ponta a ponta dentro do Claude Code, em uma
 2. **Escreveu os extratores em Python** sobre 837 mil linhas da Query A e 4,36 milhões da Query B,
    com leitura em blocos, e reproduziu de forma independente os números que tínhamos levantado à mão
    (93,8% empatados em zero, 6,2% de comprovação).
-3. **Implementou o motor e os 31 testes**, incluindo a verificação adversarial de estabilidade — que
+3. **Implementou o motor e os 40 testes**, incluindo a verificação adversarial de estabilidade — que
    é o que pegou dois bugs reais: alocação por inscrição em vez de por criança, e a criança que
    desistia retomando o próprio assento na cascata por não ter sido removida do processo.
 4. **Construiu a aplicação inteira** e o backtest que gera a tabela deste README.
 
 O achado da lacuna entre declarar (68,2%) e comprovar (6,2%) foi o que mudou o desenho do produto: em
-vez de só otimizar o algoritmo, o formulário passou a entregar a lista de documentos por critério.
-
-## Ressalvas honestas
-
-Coisas que um número bonito não deve esconder:
-
-- **O que o backtest chama de capacidade é quantas crianças a rede matriculou em cada assento em
-  2025.** Não é capacidade real nem capacidade autorizada: é uma **referência observada**, escolhida
-  porque torna a comparação justa (mesma fila, mesma capacidade — o motor não pode ganhar inventando
-  vaga). Para número operacional seria preciso o parâmetro de vagas da parametrização do processo,
-  menos renovações automáticas e transferências internas.
-- **No mapa de vacância a referência é outra e também é ajustável:** `turmas × lotação − alunos`, com
-  **lotação de referência (p90 observado = 25), ajustável** como campo de parametrização. Nunca como
-  capacidade real.
-- **O motor preenche 47.847 das 48.688 vagas** (98,3%). As 841 restantes sobraram porque toda criança
-  que as escolheu foi atendida em opção melhor. Não alocamos mais gente que o histórico — se
-  alocássemos, seria sinal de erro.
-- **A taxa de comprovação despenca de 88,9% em 2021 para 8–11% de 2022 em diante.** Descontinuidade
-  desse tamanho é mudança real de processo ou artefato de extração. Confirmar com a equipe de dados
-  da SME antes de usar o número em público.
-- **Distância é até o centróide do bairro**, não até a casa. A base é anonimizada e não traz
-  logradouro — e o protótipo também não pede.
-- **As planilhas de unidades parceiras vêm de consolidações das CREs.** É onde o ruído se concentra.
-- **Os pesos das perguntas mudaram entre 2023 e 2024.** Todo número aqui é do processo 195 (2025)
-  isolado; série temporal sem normalizar o catálogo produz número errado com aparência de certo.
+vez de só otimizar o algoritmo, o formulário passou a entregar a lista de documentos por critério, e
+as decisões de produto passaram a ser dado parametrizado com justificativa.
 
 ## Fontes
 
@@ -354,6 +484,9 @@ Coisas que um número bonito não deve esconder:
   processos 2021–2025 (Query A, Query B, Query C, unidades, microáreas IPP, oferecimentos e vagas)
 - [`taicor-ai/claude-impact-lab-rio-2`](https://github.com/taicor-ai/claude-impact-lab-rio-2) —
   apresentação do desafio
+- [Manual de Marca Prefeitura Rio 2025](https://educacao.prefeitura.rio/identidade-visual/) — SME/RJ
 
-Este é um protótipo. Não é canal oficial de inscrição: a inscrição válida é feita no
-[matricula.rio](https://matricula.rio).
+---
+
+Este é um protótipo construído em hackathon. **Não é canal oficial de inscrição:** a inscrição válida
+é feita no [matricula.rio](https://matricula.rio).
